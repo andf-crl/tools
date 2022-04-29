@@ -1,0 +1,133 @@
+#!/bin/bash
+
+## Tiny bash wrapper to manage a locally-installed
+## prometheus: alertmanager service, with all needed
+## configuration options handled automatically in-script.
+
+############################################################
+## YOUR VALUES ##
+#################
+
+# Your user home directory, used as basis for other file paths:
+USR="/Users/andf"
+
+# Prometheus-specific configuration options:
+ALERTBIN="$USR/bin/alertmanager"
+ALERTCONF="$USR/etc/prometheus/alertmanager.yml"
+ALERTLOG="$USR/log/prometheus/alertmanager.log"
+ALERTWEB="localhost:9093"
+
+############################################################
+## BEGIN SCRIPT ##
+##################
+
+## Check for provided parameter:
+PARAMETER=$1
+
+# Parse user-provided parameter and determine what to do:
+if [ -z $PARAMETER ]; then
+   echo -e "\nERROR: No parameter provided. You must provide one of:"
+   echo -e "     - start: start the local alertmanager service"
+   echo -e "     - stop: stop the local alertmanager service"
+   echo -e "     - restart: restart the local alertmanager service"
+   echo -e "     - status: check the status of the local alertmanager service"
+   echo -e "     - web: launch the running alertmanager web interface"
+   echo -e "     - conf: read/edit the alertmanager conf file"
+   echo -e "     - log: read the current alertmanager log"
+   echo -e "       Exiting ...\n"
+   exit;
+elif [ ! -z $2 ]; then
+   echo -e "\nERROR: Too many parameters provided. You must provide one of:"
+   echo -e "     - start: start the local alertmanager service"
+   echo -e "     - stop: stop the local alertmanager service"
+   echo -e "     - restart: restart the local alertmanager service"
+   echo -e "     - status: check the status of the local alertmanager service"
+   echo -e "     - web: launch the running alertmanager web interface"
+   echo -e "     - conf: read/edit the alertmanager conf file"
+   echo -e "     - log: read the current alertmanager log"
+   echo -e "       Exiting ...\n"
+   exit;
+elif [[ "$PARAMETER" =~ ^(start|START|Start)$ ]]; then
+   START=1
+elif [[ "$PARAMETER" =~ ^(stop|STOP|Stop)$ ]]; then
+   STOP=1
+elif [[ "$PARAMETER" =~ ^(restart|RESTART|Restart)$ ]]; then
+   RESTART=1
+elif [[ "$PARAMETER" =~ ^(status|STATUS|Status|check|CHECK|Check)$ ]]; then
+   STATUS=1
+elif [[ "$PARAMETER" =~ ^(web|WEB|Web)$ ]]; then
+   WEB=1
+elif [[ "$PARAMETER" =~ ^(conf|CONF|Conf)$ ]]; then
+   CONF=1
+elif [[ "$PARAMETER" =~ ^(log|LOG|Log)$ ]]; then
+   LOG=1
+else
+   echo -e "\nERROR: Unable to parse input. You must provide one of:"
+   echo -e "     - start: start the local alertmanager service"
+   echo -e "     - stop: stop the local alertmanager service"
+   echo -e "     - restart: restart the local alertmanager service"
+   echo -e "     - status: check the status of the local alertmanager service"
+   echo -e "     - web: launch the running alertmanager web interface"
+   echo -e "     - conf: read/edit the alertmanager conf file"
+   echo -e "     - log: read the current alertmanager log"
+   echo -e "       Exiting ...\n"
+   exit;
+fi
+
+## Gather data on currently-running alertmanager instance, if any:
+ALERTPROC=`ps aux | grep -i alertmanager | grep -v grep`
+ALERTPROCCOUNT=`echo $ALERTPROC | grep -c 'alertmanager.yml'`
+ALERTPROCPID=`echo $ALERTPROC | awk '{print $2}'`
+
+# Perform requested task:
+if [ $START ]; then
+   if [ `echo $ALERTPROCCOUNT` -gt 0 ]; then
+      echo -e "\nERROR: Alertmanager service already running:\n"
+      echo -e $ALERTPROC
+      echo ""
+   else
+      echo -e "\nStarting Alertmanager ..."
+      $ALERTBIN --config.file=$ALERTCONF 2> $ALERTLOG &
+      sleep 2
+      tail -1 $ALERTLOG
+      echo ""
+   fi
+elif [ $STOP ]; then
+   if [ `echo $ALERTPROCCOUNT` -lt 1 ]; then
+      echo -e "\nAlertmanager service not running\n"
+   else
+      echo -e "\nStopping Alertmanager ..."
+      kill $ALERTPROCPID > /dev/null 2>&1
+      echo ""
+      echo "   ... done!"
+      echo ""
+   fi
+elif [ $RESTART ]; then
+   echo -e "\nRestarting Alertmanager ..."
+   kill $ALERTPROCPID > /dev/null 2>&1
+   sleep 1
+   $ALERTBIN --config.file=$PROMCONF 2> $ALERTLOG &
+   sleep 2
+   tail -1 $ALERTLOG
+   echo ""
+elif [ $STATUS ]; then
+   if [ `echo $ALERTPROCCOUNT` -lt 1 ]; then
+      echo -e "\nAlertmanager service not running\n"
+   else
+      echo ""
+      echo $ALERTPROC
+      echo ""
+   fi
+elif [ $WEB ]; then
+   open http://$ALERTWEB
+elif [ $CONF ]; then
+   nano $ALERTCONF
+   echo ""
+elif [ $LOG ]; then
+   tail -100 $ALERTLOG
+   echo ""
+else
+   echo "ERROR: Not possible to get here"
+fi
+
+exit;
