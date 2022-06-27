@@ -15,6 +15,8 @@
 ##
 ## Currently, this script does not support excluding by filename globs:
 ## you may only specify directories to the -e flag (as show above).
+##
+## This script uses grep -i, for case insensitivy.
 
 ############################################################
 ## BEGIN SCRIPT ##
