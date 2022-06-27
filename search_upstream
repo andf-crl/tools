@@ -93,7 +93,7 @@ IFS="
 for LINE in `cat $TMPFILE.grepout`; do
     FILENAME=`echo $LINE | awk -F ':' '{print $1}'`
     UPSTREAM_INCLUDE=`echo $LINE | awk -F '{% remote_include ' '{print $2}' | sed 's/ %}//g'`
-    curl -s $UPSTREAM_INCLUDE | grep -i $SEARCH_STRING  > $TMPFILE.mostrecentsearch
+    curl -s $UPSTREAM_INCLUDE | grep -i --color=always $SEARCH_STRING  > $TMPFILE.mostrecentsearch
     if [ $? -lt 1 ]; then
        echo -e "\n################################################################################################################"
        echo -e "FOUND MATCH:"
