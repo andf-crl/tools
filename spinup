@@ -1,0 +1,315 @@
+#!/bin/bash
+
+## Manage a local cockroach cluster, for testing or writing docs
+##
+## Supports the following commands:
+##
+## - start: start a new cockroach cluster and init
+## - stop: stop all running cockroach instances started by this script
+## - status: show all running cockroach instances started by this script
+## - clean: deletes all local directories from cockroach instances started
+##          by this script
+##
+## Supports the following flags:
+##
+## - n: number of nodes to spinup and join together. If 1, uses
+##      cockroach start-single-node and skips init.
+## - v: version of cockroachdb to use. See NOTE ON VERSION below.
+## - p: preload movr database
+##
+## NOTE ON VERSION:
+## This script uses your environment's `cockroach` command, whether alias,
+## symlink, or through $PATH. Be sure you have this set to the version of
+## CRDB that you expect. The following is what I use (~/crl/ is in $PATH):
+##
+## $ ls -ld ~/crl/cockroach*
+##   ~/crl/cockroach -> cockroach-22.1
+##   ~/crl/cockroach-21.1 -> cockroach-v21.1.19.darwin-10.9-amd64/cockroach
+##   ~/crl/cockroach-21.2 -> cockroach-v21.2.12.darwin-10.9-amd64/cockroach
+##   ~/crl/cockroach-22.1 -> cockroach-v22.1.2.darwin-10.9-amd64/cockroach
+##   ~/crl/cockroach-v21.1.19.darwin-10.9-amd64
+##   ~/crl/cockroach-v21.2.12.darwin-10.9-amd64
+##   ~/crl/cockroach-v22.1.2.darwin-10.9-amd64
+##
+## With a setup like the above, I can then freely run the following easily:
+## spinup start :: starts up with default `cockroach` which is 22.1 here
+## spinup -v 22.1 start :: same as above
+## spinup -v 21.2 start :: starts up with ~/crl/cockroach-21.2
+## spinup -v 21.1 start :: starts up with ~/crl/cockroach-21.1
+
+############################################################
+## YOUR VALUES ##
+#################
+
+## The staging directory: where to store the following:
+##    DATA: --store=$STAGING/$ID/data/node$NODE
+##    LOG:  >> $STAGING/$ID/log/cockroach_node1.log
+## If you use a ~ in the path, don't quote the value:
+STAGING=~/staging
+
+############################################################
+## BEGIN SCRIPT ##
+##################
+
+NODE_COUNT=3
+VERSION=""
+PREPOPULATE=0
+SINGLE_NODE=0
+PORT_OFFSET=0
+JOIN_HOSTS=""
+
+## Get this script's current running PID. This is how we'll uniqueify
+## our local folder structure later:
+ID=`echo $$`
+
+## Check for arguments passed to this script:
+while getopts ":n:v:p" opt; do
+  case ${opt} in
+    n )
+      NODE_COUNT="$OPTARG"
+      ;;
+    v)
+      VERSION=`echo $OPTARG | sed 's%^v%%g'`
+      ;;
+    p)
+      PREPOPULATE=1
+      ;;
+    \? )
+      echo -e "\nERROR: Invalid option: $OPTARG" 1>&2
+      echo "       Supports -n, -v, -p flags"
+      exit;
+      ;;
+    : )
+      echo -e "\nERROR: If you specify -$OPTARG, you must provide a value." 1>&2
+      ;;
+  esac
+done
+
+shift $((OPTIND-1))
+
+## Sanity check on node count:
+if [ $NODE_COUNT -lt 1 ]; then
+   echo "ERROR: Impossible to spin up a 0-node cluster, and you know it!"
+   exit;
+fi
+
+## Sanity check on version selection:
+if [[ ! -z $VERSION && `echo $VERSION | egrep -c '^[0-9]{1,2}\.[0-9]$'` -lt 1 ]]; then
+   echo "ERROR: Malformed version specified to -v"
+   echo "       It must be something like \`21.2\` or \`21.1\`."
+   echo "       Leave off the -v flag to use your environment's /`cockroach/`."
+   exit;
+elif [[ ! -z $VERSION && ! `which cockroach-$VERSION` ]]; then
+   echo "ERROR: No matching cockroach binary found in \$PATH for requested version $VERSION"
+   echo "       This script expects either \`cockroach\` or \`cockroach-21.2\`"
+   echo "       (or similar other version) to be findable in your $PATH"
+   exit;
+elif [ ! -z $VERSION ]; then
+   COCKROACH="cockroach-$VERSION"
+else
+   COCKROACH="cockroach"
+fi
+
+## Collect search string from provided parameter:
+PARAMETER=$1
+
+# Parse user-provided parameter and determine what to do:
+if [ -z $PARAMETER ]; then
+   echo -e "\nERROR: No command specified."
+   echo "          - start: start a new cockroach cluster and init"
+   echo "          - stop: stop all running cockroach instances started by this script"
+   echo "          - status: show all running cockroach instances started by this script"
+   echo "          - clean: deletes all local directories from cockroach instances started"
+   echo "                   by this script"
+   exit;
+elif [ ! -z $2 ]; then
+   echo -e "\nERROR: Too many commands provided. You must provide only one of:"
+   echo "          - start: start a new cockroach cluster and init"
+   echo "          - stop: stop all running cockroach instances started by this script"
+   echo "          - status: show all running cockroach instances started by this script"
+   echo "          - clean: deletes all local directories from cockroach instances started"
+   echo "                   by this script"
+   exit;
+elif [[ "$PARAMETER" =~ ^(start|START|Start)$ ]]; then
+   START=1
+   echo "Starting new $NODE_COUNT node cluster ..."
+elif [[ "$PARAMETER" =~ ^(stop|STOP|Stop)$ ]]; then
+   STOP=1
+   echo "Stopping all cockroach processes started earlier by this script ..."
+elif [[ "$PARAMETER" =~ ^(status|STATUS|Status|stat|STAT|Stat)$ ]]; then
+   STATUS=1
+   echo "Getting status ..."
+elif [[ "$PARAMETER" =~ ^(clean|CLEAN|Clean)$ ]]; then
+   CLEAN=1
+   echo "Cleaning up any previous staging dirs left over from previous runs of this script ..."
+else
+   echo -e "\nERROR: You specified an unsupported command. Valid commands are:"
+   echo "          - start: start a new cockroach cluster and init"
+   echo "          - stop: stop all running cockroach instances started by this script"
+   echo "          - status: show all running cockroach instances started by this script"
+   echo "          - clean: deletes all local directories from cockroach instances started"
+   echo "                   by this script"
+   exit;
+fi
+
+## Good ol' Bash field-separator
+IFS="
+"
+
+## Gather runtime environment data:
+CURRENT_RUNNING_COUNT=`ps aux | grep cockroach | grep $STAGING | wc -l`
+FILES_IN_USE=`lsof +D $STAGING | grep -c $STAGING`
+
+## Build local folder structure in $STAGING:
+mkdir -p $STAGING
+mkdir -m 750 -p $STAGING/$ID/data
+mkdir -m 750 -p $STAGING/$ID/log
+
+## Function to build an egrep-compatible list of ports we intend to use
+## and then checks to see if they are already in use:
+check_for_conflict()
+{
+   CHECK_PORTS=""
+   for NODE in `seq 1 $NODE_COUNT`; do
+      if [ -z $CHECK_PORTS ]; then
+         CHECK_PORTS=".$((26256+NODE+PORT_OFFSET))"
+         CHECK_PORTS="${CHECK_PORTS}|.$((8079+NODE+PORT_OFFSET))"
+      else
+         CHECK_PORTS="${CHECK_PORTS}|.$((26256+NODE+PORT_OFFSET))"
+         CHECK_PORTS="${CHECK_PORTS}|.$((8079+NODE+PORT_OFFSET))"
+      fi
+   done
+
+   PORT_CONFLICT=`netstat -an | egrep -c "($CHECK_PORTS)"`
+   if [[ $PORT_CONFLICT -gt 0 ]]; then
+      return 0
+   else
+      return 1
+   fi
+}
+
+## Uses above function to check for potential port conflicts, continually
+## bumping our intended ports by 100 each time we find a conflict: for both
+## SQL port and HTTP port:
+while check_for_conflict; do
+   PORT_OFFSET="$((PORT_OFFSET+100))"
+done
+
+## Spinup a cluster, if -n 1 was passed (using start-single-node);
+## note that start-single-node does not require --join or running init:
+if [[ $START && $NODE_COUNT -eq 1 ]]; then
+   $COCKROACH start-single-node \
+   --insecure \
+   --store=$STAGING/$ID/data/node1 \
+   --listen-addr=localhost:$((26257+PORT_OFFSET)) \
+   --http-addr=localhost:$((8080+PORT_OFFSET)) \
+   --background >> $STAGING/$ID/log/cockroach_node1.log 2>&1
+   HTTP_HOST=localhost:$((8080+PORT_OFFSET))
+   HOST=localhost:$((26257+PORT_OFFSET))
+
+   ## if -p was passed, populate the cluster with sample data from movr:
+   if [ $PREPOPULATE -eq 1 ]; then
+      cockroach workload init movr "postgresql://root@$HOST?sslmode=disable"
+   fi
+
+   ## Report our success!
+   echo -e "\n##############################  CLUSTER READY!  ##############################\n"
+   echo -e "   Single node cluster is live!\n"
+
+   ps aux | grep cockroach | grep $ID | grep -v grep | awk '{for (i=1;i<=10;i++){$i=""};print}'
+
+   echo -e "\n   SQL Shell: $COCKROACH sql --insecure --host=$HOST"
+   echo "   DB Console: http://$HTTP_HOST"
+   echo -e "\n##############################################################################\n"
+
+## Spinup a cluster, with $NODE_COUNT nodes with -n, or 3 nodes otherwise (default):
+elif [ $START ]; then
+   ## Assemble JOIN_HOSTS:
+   for NODE in `seq 1 $NODE_COUNT`; do
+      if [ -z $JOIN_HOSTS ]; then
+         JOIN_HOSTS=localhost:$((26256+NODE+PORT_OFFSET))
+      else
+         JOIN_HOSTS=${JOIN_HOSTS},localhost:$((26256+NODE+PORT_OFFSET))
+      fi
+   done
+
+   for NODE in `seq 1 $NODE_COUNT`; do
+      $COCKROACH start \
+      --insecure \
+      --store=$STAGING/$ID/data/node$NODE \
+      --listen-addr=localhost:$((26256+NODE+PORT_OFFSET)) \
+      --http-addr=localhost:$((8079+NODE+PORT_OFFSET)) \
+      --join=$JOIN_HOSTS \
+      --background >> $STAGING/$ID/log/cockroach_node$NODE.log 2>&1
+      if [[ $NODE -eq 1 ]]; then
+         HOST=localhost:$((26256+NODE+PORT_OFFSET))
+         HTTP_HOST=localhost:$((8079+NODE+PORT_OFFSET))
+      fi
+   done
+
+   sleep 1
+
+   $COCKROACH init --insecure --host=$HOST 2>&1 > /dev/null
+
+   sleep 1
+
+   ## if -p was passed, populate the cluster with sample data from movr:
+   if [ $PREPOPULATE -eq 1 ]; then
+      cockroach workload init movr "postgresql://root@$HOST?sslmode=disable"
+   fi
+
+   ## Report our success!
+   echo -e "\n##############################  CLUSTER READY!  ##############################\n"
+   echo -e "   $NODE_COUNT node cluster is live!\n"
+
+   ps aux | grep cockroach | grep $ID | grep -v grep | awk '{for (i=1;i<=10;i++){$i=""};print}'
+
+   echo -e "\n   SQL Shell: $COCKROACH sql --insecure --host=$HOST"
+   echo "   DB Console: http://$HTTP_HOST"
+   echo -e "\n##############################################################################\n"
+
+elif [ $STOP ]; then
+   if [[ $CURRENT_RUNNING_COUNT -gt 0 ]]; then
+      for PID in `ps aux | grep $STAGING | grep -v grep | awk '{print $2}'`; do
+         # This is what roachprod does, soooo ....
+         kill -9 $PID
+      done
+   else
+      echo -e "   Nothing to do: no cockroach processes started by this script are currently running!\n"
+   fi
+elif [ $STATUS ]; then
+   if [[ $CURRENT_RUNNING_COUNT -gt 0 ]]; then
+      echo -e "\nThe following cockroach processes are running that were started by this script:\n"
+      ps aux | grep cockroach | grep $STAGING
+      echo ""
+   else
+      echo -e "\nNo cockroach processes are running that were started by this script:\n"
+   fi
+elif [ $CLEAN ]; then
+   USED_RAW=`du -sk $STAGING/* | cut -f 1 | grep -v ^0$ | paste -sd+ -| bc`
+   if [ $FILES_IN_USE -gt 0 ]; then
+      echo "ERROR: Files in $STAGING are in use! Please run \`spinup stop\` first"
+      echo "       before attempting to clean the staging directory."
+      exit;
+   elif [[ ! -z $USED_RAW ]]; then
+      USED=`echo "scale=2;$USED_RAW/1024/1024" | bc`
+      while true; do
+         echo ""
+         read -p "Are you sure you wish to delete $USED GB of data in $STAGING? [y/n] " yn
+         case $yn in
+            [Yy]* ) rm -rf $STAGING/*; break;;
+            [Nn]* ) exit;;
+            * ) echo "Please answer yes or no.";;
+         esac
+      done
+      echo -e "\nFreed up $USED GB!\n"
+   else
+      echo -e "  Nothing to clean up! Staging dir $STAGING uses 0KB\n"
+   fi
+else
+   ## It's not actually possible to get here, but:
+   echo "ERROR: Unexpected command. Use one of: start, stop, status, clean.\n"
+   exit;
+fi
+
+exit;
