@@ -4,11 +4,15 @@
 ##
 ## Supports the following commands:
 ##
-## - start: start a new cockroach cluster and init
-## - stop: stop all running cockroach instances started by this script
+## - start:  start a new cockroach cluster and init
+## - stop:   stop all running cockroach instances started by this script
 ## - status: show all running cockroach instances started by this script
-## - clean: deletes all local directories from cockroach instances started
-##          by this script
+## - clean:  deletes all local directories from cockroach instances started
+##              by this script
+## - web:    launch the DB Console web UI to the first cockroach instance
+##              started by this script.
+## - sql:    launch an interactive SQL shell to the first cockroach instance
+##              started by this script
 ##
 ## Supports the following flags:
 ##
@@ -36,6 +40,8 @@
 ## spinup -v 22.1 start :: same as above
 ## spinup -v 21.2 start :: starts up with ~/crl/cockroach-21.2
 ## spinup -v 21.1 start :: starts up with ~/crl/cockroach-21.1
+##
+## TODO: Add --pid-file support per Raph.
 
 ############################################################
 ## YOUR VALUES ##
@@ -115,20 +121,28 @@ PARAMETER=$1
 
 # Parse user-provided parameter and determine what to do:
 if [ -z $PARAMETER ]; then
-   echo -e "\nERROR: No command specified."
-   echo "          - start: start a new cockroach cluster and init"
-   echo "          - stop: stop all running cockroach instances started by this script"
-   echo "          - status: show all running cockroach instances started by this script"
-   echo "          - clean: deletes all local directories from cockroach instances started"
-   echo "                   by this script"
+   echo -e "\nERROR: No command specified. You must specify one of:"
+   echo "            start  : start a new cockroach cluster and init"
+   echo "            stop   : stop all running cockroach instances started by this script"
+   echo "            status : show all running cockroach instances started by this script"
+   echo "            clean  : deletes all local directories from cockroach instances started"
+   echo "                        by this script"
+   echo "            web    : launch the DB Console web UI to the first cockroach instance"
+   echo "                        started by this script"
+   echo "            sql    : launch an interactive SQL shell to the first cockroach instance"
+   echo "                        started by this script"
    exit;
 elif [ ! -z $2 ]; then
    echo -e "\nERROR: Too many commands provided. You must provide only one of:"
-   echo "          - start: start a new cockroach cluster and init"
-   echo "          - stop: stop all running cockroach instances started by this script"
-   echo "          - status: show all running cockroach instances started by this script"
-   echo "          - clean: deletes all local directories from cockroach instances started"
-   echo "                   by this script"
+   echo "            start  : start a new cockroach cluster and init"
+   echo "            stop   : stop all running cockroach instances started by this script"
+   echo "            status : show all running cockroach instances started by this script"
+   echo "            clean  : deletes all local directories from cockroach instances started"
+   echo "                        by this script"
+   echo "            web    : launch the DB Console web UI to the first cockroach instance"
+   echo "                        started by this script"
+   echo "            sql    : launch an interactive SQL shell to the first cockroach instance"
+   echo "                        started by this script"
    exit;
 elif [[ "$PARAMETER" =~ ^(start|START|Start)$ ]]; then
    START=1
@@ -142,13 +156,21 @@ elif [[ "$PARAMETER" =~ ^(status|STATUS|Status|stat|STAT|Stat)$ ]]; then
 elif [[ "$PARAMETER" =~ ^(clean|CLEAN|Clean)$ ]]; then
    CLEAN=1
    echo "Cleaning up any previous staging dirs left over from previous runs of this script ..."
+elif [[ "$PARAMETER" =~ ^(web|WEB|Web|http|HTTP|Http)$ ]]; then
+   OPEN_WEB=1
+elif [[ "$PARAMETER" =~ ^(sql|SQL|Sql)$ ]]; then
+   OPEN_SQL=1
 else
    echo -e "\nERROR: You specified an unsupported command. Valid commands are:"
-   echo "          - start: start a new cockroach cluster and init"
-   echo "          - stop: stop all running cockroach instances started by this script"
-   echo "          - status: show all running cockroach instances started by this script"
-   echo "          - clean: deletes all local directories from cockroach instances started"
-   echo "                   by this script"
+   echo "            start  : start a new cockroach cluster and init"
+   echo "            stop   : stop all running cockroach instances started by this script"
+   echo "            status : show all running cockroach instances started by this script"
+   echo "            clean  : deletes all local directories from cockroach instances started"
+   echo "                        by this script"
+   echo "            web    : launch the DB Console web UI to the first cockroach instance"
+   echo "                        started by this script"
+   echo "            sql    : launch an interactive SQL shell to the first cockroach instance"
+   echo "                        started by this script"
    exit;
 fi
 
@@ -190,10 +212,12 @@ check_for_conflict()
 
 ## Uses above function to check for potential port conflicts, continually
 ## bumping our intended ports by 100 each time we find a conflict: for both
-## SQL port and HTTP port:
-while check_for_conflict; do
-   PORT_OFFSET="$((PORT_OFFSET+100))"
-done
+## SQL port and HTTP port. Only run if we have been asked to $START:
+if [ $START ]; then
+   while check_for_conflict; do
+      PORT_OFFSET="$((PORT_OFFSET+100))"
+   done
+fi
 
 ## Spinup a cluster, if -n 1 was passed (using start-single-node);
 ## note that start-single-node does not require --join or running init:
@@ -283,7 +307,7 @@ elif [ $STATUS ]; then
       ps aux | grep cockroach | grep $STAGING
       echo ""
    else
-      echo -e "\nNo cockroach processes are running that were started by this script:\n"
+      echo -e "\nNo cockroach processes are running that were started by this script.\n"
    fi
 elif [ $CLEAN ]; then
    USED_RAW=`du -sk $STAGING/* | cut -f 1 | grep -v ^0$ | paste -sd+ -| bc`
@@ -306,9 +330,23 @@ elif [ $CLEAN ]; then
    else
       echo -e "  Nothing to clean up! Staging dir $STAGING uses 0KB\n"
    fi
+elif [ $OPEN_WEB ]; then
+   if [[ $CURRENT_RUNNING_COUNT -gt 0 ]]; then
+      HTTP_HOST=`ps aux | grep "$COCKROACH start" | grep staging | sort -k 16 | head -1 | awk '{print $16}' | sed 's%--http-addr=%%g'`
+      open http://$HTTP_HOST
+   else
+      echo -e "\nNothing to do. No cockroach processes are running that were started by this script.\n"
+   fi
+elif [ $OPEN_SQL ]; then
+   if [[ $CURRENT_RUNNING_COUNT -gt 0 ]]; then
+      HOST=`ps aux | grep "$COCKROACH start" | grep staging | sort -k 15 | head -1 | awk '{print $15}' | sed 's%--listen-addr=%%g'`
+      $COCKROACH sql --insecure --host=$HOST
+   else
+      echo -e "\nNothing to do. No cockroach processes are running that were started by this script.\n"
+   fi
 else
    ## It's not actually possible to get here, but:
-   echo "ERROR: Unexpected command. Use one of: start, stop, status, clean.\n"
+   echo "ERROR: Unexpected command.\n"
    exit;
 fi
 
