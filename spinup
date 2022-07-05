@@ -323,7 +323,12 @@ elif [ $START ]; then
    echo -e "\n##############################################################################\n"
 
 elif [ $STOP ]; then
-   if [[ `ps aux | grep "$COCKROACH start" | grep $STAGING | wc -l` -gt 0 ]]; then
+   if [[ -z $VERSION  && `ps aux | grep "cockroach.* start" | grep $STAGING | wc -l` -gt 0 ]]; then
+      for PID in `ps aux | grep "cockroach.* start" | grep $STAGING | awk '{print $2}'`; do
+         # This is what roachprod does, soooo ....
+         kill -9 $PID
+      done
+   elif [[ `ps aux | grep "$COCKROACH start" | grep $STAGING | wc -l` -gt 0 ]]; then
       for PID in `ps aux | grep "$COCKROACH start" | grep $STAGING | awk '{print $2}'`; do
          # This is what roachprod does, soooo ....
          kill -9 $PID
@@ -336,7 +341,7 @@ elif [ $STOP ]; then
       echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
    fi
 elif [ $STATUS ]; then
-   if [[ -z $VERSION  && `ps aux | grep "cockroach.* start" | grep $STAGING` ]]; then
+   if [[ -z $VERSION  && `ps aux | grep "cockroach.* start" | grep $STAGING | wc -l` -gt 0 ]]; then
       echo -e "\nThe following $COCKROACH processes are running that were started by this script:\n"
       ps aux | grep "cockroach.* start" | grep $STAGING
       echo ""
@@ -349,7 +354,7 @@ elif [ $STATUS ]; then
       echo -e "       But there are other versions of cockroach running on this system presently."
       echo -e "       Run \`spinup stat\` to see them.\n"
    else
-      echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
+      echo -e "\nNo $COCKROACH processes are running that were started by this script.\n"
    fi
 elif [ $CLEAN ]; then
    USED_RAW=`du -sk $STAGING/* 2>/dev/null | cut -f 1 | grep -v ^0$ | paste -sd+ -| bc`
