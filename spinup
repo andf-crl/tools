@@ -185,7 +185,7 @@ IFS="
 "
 
 ## Gather runtime environment data:
-CURRENT_RUNNING_COUNT=`ps aux | grep $COCKROACH | grep $STAGING | wc -l`
+CURRENT_RUNNING_COUNT=`ps aux | grep cockroach | grep $STAGING | wc -l`
 FILES_IN_USE=`lsof +D $STAGING | grep -c $STAGING`
 
 ## Build local folder structure in $STAGING:
