@@ -10,16 +10,16 @@
 ## - clean:  deletes all local directories from cockroach instances started
 ##              by this script
 ## - web:    launch the DB Console web UI to the first cockroach instance
-##              started by this script.
+##              started by this script
 ## - sql:    launch an interactive SQL shell to the first cockroach instance
 ##              started by this script
 ##
 ## Supports the following flags:
 ##
-## - n: number of nodes to spinup and join together. If 1, uses
-##      cockroach start-single-node and skips init.
-## - v: version of cockroachdb to use. See NOTE ON VERSION below.
-## - p: preload movr database
+## - n: (start only) Number of nodes to spinup and join together. If 1, uses
+##      cockroach start-single-node and skips init (default: 3)
+## - v: (all except clean) Version of cockroachdb to use (see NOTE ON VERSION below)
+## - i: (start only) Import movr database
 ##
 ## NOTE ON VERSION:
 ## This script uses your environment's `cockroach` command, whether alias,
@@ -41,7 +41,13 @@
 ## spinup -v 21.2 start :: starts up with ~/crl/cockroach-21.2
 ## spinup -v 21.1 start :: starts up with ~/crl/cockroach-21.1
 ##
-## TODO: Add --pid-file support per Raph.
+## TODO: 
+##   - Add --pid-file support per Raph.
+##   - Improve resilience working with staging dir, $ID clobbering, etc.
+##         Likely with --pid-file.
+##   - Add -b break flag to randomly break an active cluster, based on
+##         firedrills docs
+##   - Add -l log flag to tail logfile per cluster.
 
 ############################################################
 ## YOUR VALUES ##
@@ -59,7 +65,7 @@ STAGING=~/staging
 
 NODE_COUNT=3
 VERSION=""
-PREPOPULATE=0
+IMPORT_MOVR=0
 SINGLE_NODE=0
 PORT_OFFSET=0
 JOIN_HOSTS=""
@@ -69,7 +75,7 @@ JOIN_HOSTS=""
 ID=`echo $$`
 
 ## Check for arguments passed to this script:
-while getopts ":n:v:p" opt; do
+while getopts ":n:v:i" opt; do
   case ${opt} in
     n )
       NODE_COUNT="$OPTARG"
@@ -77,8 +83,8 @@ while getopts ":n:v:p" opt; do
     v)
       VERSION=`echo $OPTARG | sed 's%^v%%g'`
       ;;
-    p)
-      PREPOPULATE=1
+    i)
+      IMPORT_MOVR=1
       ;;
     \? )
       echo -e "\nERROR: Invalid option: $OPTARG" 1>&2
@@ -149,7 +155,7 @@ elif [[ "$PARAMETER" =~ ^(start|START|Start)$ ]]; then
    echo "Starting new $NODE_COUNT node cluster ..."
 elif [[ "$PARAMETER" =~ ^(stop|STOP|Stop)$ ]]; then
    STOP=1
-   echo "Stopping all cockroach processes started earlier by this script ..."
+   echo "Stopping all $COCKROACH processes started earlier by this script ..."
 elif [[ "$PARAMETER" =~ ^(status|STATUS|Status|stat|STAT|Stat)$ ]]; then
    STATUS=1
    echo "Getting status ..."
@@ -179,7 +185,7 @@ IFS="
 "
 
 ## Gather runtime environment data:
-CURRENT_RUNNING_COUNT=`ps aux | grep cockroach | grep $STAGING | wc -l`
+CURRENT_RUNNING_COUNT=`ps aux | grep $COCKROACH | grep $STAGING | wc -l`
 FILES_IN_USE=`lsof +D $STAGING | grep -c $STAGING`
 
 ## Build local folder structure in $STAGING:
@@ -232,15 +238,15 @@ if [[ $START && $NODE_COUNT -eq 1 ]]; then
    HOST=localhost:$((26257+PORT_OFFSET))
 
    ## if -p was passed, populate the cluster with sample data from movr:
-   if [ $PREPOPULATE -eq 1 ]; then
-      cockroach workload init movr "postgresql://root@$HOST?sslmode=disable"
+   if [ $IMPORT_MOVR -eq 1 ]; then
+      $COCKROACH workload init movr "postgresql://root@$HOST?sslmode=disable"
    fi
 
    ## Report our success!
    echo -e "\n##############################  CLUSTER READY!  ##############################\n"
    echo -e "   Single node cluster is live!\n"
 
-   ps aux | grep cockroach | grep $ID | grep -v grep | awk '{for (i=1;i<=10;i++){$i=""};print}'
+   ps aux | grep $COCKROACH | grep $STAGING | grep $ID | awk '{for (i=1;i<=10;i++){$i=""};print}'
 
    echo -e "\n   SQL Shell: $COCKROACH sql --insecure --host=$HOST"
    echo "   DB Console: http://$HTTP_HOST"
@@ -278,15 +284,15 @@ elif [ $START ]; then
    sleep 1
 
    ## if -p was passed, populate the cluster with sample data from movr:
-   if [ $PREPOPULATE -eq 1 ]; then
-      cockroach workload init movr "postgresql://root@$HOST?sslmode=disable"
+   if [ $IMPORT_MOVR -eq 1 ]; then
+      $COCKROACH workload init movr "postgresql://root@$HOST?sslmode=disable"
    fi
 
    ## Report our success!
    echo -e "\n##############################  CLUSTER READY!  ##############################\n"
    echo -e "   $NODE_COUNT node cluster is live!\n"
 
-   ps aux | grep cockroach | grep $ID | grep -v grep | awk '{for (i=1;i<=10;i++){$i=""};print}'
+   ps aux | grep $COCKROACH | grep $STAGING | grep $ID | awk '{for (i=1;i<=10;i++){$i=""};print}'
 
    echo -e "\n   SQL Shell: $COCKROACH sql --insecure --host=$HOST"
    echo "   DB Console: http://$HTTP_HOST"
@@ -294,20 +300,20 @@ elif [ $START ]; then
 
 elif [ $STOP ]; then
    if [[ $CURRENT_RUNNING_COUNT -gt 0 ]]; then
-      for PID in `ps aux | grep $STAGING | grep -v grep | awk '{print $2}'`; do
+      for PID in `ps aux | grep $COCKROACH | grep $STAGING | awk '{print $2}'`; do
          # This is what roachprod does, soooo ....
          kill -9 $PID
       done
    else
-      echo -e "   Nothing to do: no cockroach processes started by this script are currently running!\n"
+      echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
    fi
 elif [ $STATUS ]; then
    if [[ $CURRENT_RUNNING_COUNT -gt 0 ]]; then
-      echo -e "\nThe following cockroach processes are running that were started by this script:\n"
-      ps aux | grep cockroach | grep $STAGING
+      echo -e "\nThe following $COCKROACH processes are running that were started by this script:\n"
+      ps aux | grep $COCKROACH | grep $STAGING
       echo ""
    else
-      echo -e "\nNo cockroach processes are running that were started by this script.\n"
+      echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
    fi
 elif [ $CLEAN ]; then
    USED_RAW=`du -sk $STAGING/* | cut -f 1 | grep -v ^0$ | paste -sd+ -| bc`
@@ -332,17 +338,17 @@ elif [ $CLEAN ]; then
    fi
 elif [ $OPEN_WEB ]; then
    if [[ $CURRENT_RUNNING_COUNT -gt 0 ]]; then
-      HTTP_HOST=`ps aux | grep "$COCKROACH start" | grep staging | sort -k 16 | head -1 | awk '{print $16}' | sed 's%--http-addr=%%g'`
+      HTTP_HOST=`ps aux | grep "$COCKROACH start" | grep $STAGING | sort -k 16 | head -1 | awk '{print $16}' | sed 's%--http-addr=%%g'`
       open http://$HTTP_HOST
    else
-      echo -e "\nNothing to do. No cockroach processes are running that were started by this script.\n"
+      echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
    fi
 elif [ $OPEN_SQL ]; then
    if [[ $CURRENT_RUNNING_COUNT -gt 0 ]]; then
-      HOST=`ps aux | grep "$COCKROACH start" | grep staging | sort -k 15 | head -1 | awk '{print $15}' | sed 's%--listen-addr=%%g'`
+      HOST=`ps aux | grep "$COCKROACH start" | grep $STAGING | sort -k 15 | head -1 | awk '{print $15}' | sed 's%--listen-addr=%%g'`
       $COCKROACH sql --insecure --host=$HOST
    else
-      echo -e "\nNothing to do. No cockroach processes are running that were started by this script.\n"
+      echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
    fi
 else
    ## It's not actually possible to get here, but:
