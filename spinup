@@ -17,14 +17,15 @@
 ## Supports the following flags:
 ##
 ## - n: (start only) Number of nodes to spinup and join together. If 1, uses
-##      cockroach start-single-node and skips init (default: 3)
-## - v: (all except clean) Version of cockroachdb to use (see NOTE ON VERSION below)
+##         cockroach start-single-node and skips init (default: 3)
+## - v: (all except clean) Specific version of cockroach to use (see NOTE ON
+##         VERSION below)
 ## - i: (start only) Import movr database
 ##
 ## NOTE ON VERSION:
 ## This script uses your environment's `cockroach` command, whether alias,
 ## symlink, or through $PATH. Be sure you have this set to the version of
-## CRDB that you expect. The following is what I use (~/crl/ is in $PATH):
+## CRDB that you expect. The following is recommended (with ~/crl/ in $PATH):
 ##
 ## $ ls -ld ~/crl/cockroach*
 ##   ~/crl/cockroach -> cockroach-22.1
@@ -35,11 +36,27 @@
 ##   ~/crl/cockroach-v21.2.12.darwin-10.9-amd64
 ##   ~/crl/cockroach-v22.1.2.darwin-10.9-amd64
 ##
-## With a setup like the above, I can then freely run the following easily:
-## spinup start :: starts up with default `cockroach` which is 22.1 here
-## spinup -v 22.1 start :: same as above
-## spinup -v 21.2 start :: starts up with ~/crl/cockroach-21.2
-## spinup -v 21.1 start :: starts up with ~/crl/cockroach-21.1
+## With a setup like the above, we can then freely run the following easily:
+##    spinup start           :: starts up with default `cockroach` which is 22.1 here
+##    spinup -v 22.1 start   :: same as above
+##    spinup -v 21.2 start   :: starts up with `which cockroach-21.2`
+##
+## Similarly, we can fine-tune the behavior of the other commands as well:
+##    spinup stat            :: shows all cockroach procs started by us
+##    spinup -v 22.1 stat    :: shows only 22.1 cockroach procs started by us
+##    spinup -v 21.2 stat    :: shows only 21.2 cockroach procs started by us
+##
+##    spinup stop            :: stops all cockroach procs started by us
+##    spinup -v 22.1 stop    :: stops only 22.1 cockroach procs started by us
+##    spinup -v 21.2 stop    :: stops only 21.2 cockroach procs started by us
+##
+##    spinup web            :: opens DB Console of first cockroach proc started by us
+##    spinup -v 22.1 web    :: opens DB Console of first cockroach 22.1 proc started by us
+##    spinup -v 21.2 web    :: opens DB Console of first cockroach 21.2 proc started by us
+##
+##    spinup sql            :: opens SQL shell to first cockroach proc started by us
+##    spinup -v 22.1 sql    :: opens SQL shell to first cockroach 22.1 proc started by us
+##    spinup -v 21.2 sql    :: opens SQL shell to first cockroach 21.2 proc started by us
 ##
 ## TODO: 
 ##   - Add --pid-file support per Raph.
@@ -58,6 +75,11 @@
 ##    LOG:  >> $STAGING/$ID/log/cockroach_node1.log
 ## If you use a ~ in the path, don't quote the value:
 STAGING=~/staging
+
+## Set the current "Stable" version i.e. the latest version.
+## We use this to understand what your version your
+## `which cockroach` is pointing to.
+CURRENT_STABLE="22.1"
 
 ############################################################
 ## BEGIN SCRIPT ##
@@ -87,8 +109,11 @@ while getopts ":n:v:i" opt; do
       IMPORT_MOVR=1
       ;;
     \? )
-      echo -e "\nERROR: Invalid option: $OPTARG" 1>&2
-      echo "       Supports -n, -v, -p flags"
+      echo -e "\nERROR: Invalid option: $OPTARG. The following are the supported flags:" 1>&2
+      echo "        -n: (start only) Number of nodes to spinup and join together. If 1, uses"
+      echo "            cockroach start-single-node and skips init (default: 3)"
+      echo "        -v: (all except clean) Specific version of cockroach to use"
+      echo -e "        -i: (start only) Import movr database\n"
       exit;
       ;;
     : )
@@ -116,7 +141,7 @@ elif [[ ! -z $VERSION && ! `which cockroach-$VERSION` ]]; then
    echo "       This script expects either \`cockroach\` or \`cockroach-21.2\`"
    echo "       (or similar other version) to be findable in your $PATH"
    exit;
-elif [ ! -z $VERSION ]; then
+elif [[ ! -z $VERSION && $VERSION != $CURRENT_STABLE ]]; then
    COCKROACH="cockroach-$VERSION"
 else
    COCKROACH="cockroach"
@@ -136,7 +161,7 @@ if [ -z $PARAMETER ]; then
    echo "            web    : launch the DB Console web UI to the first cockroach instance"
    echo "                        started by this script"
    echo "            sql    : launch an interactive SQL shell to the first cockroach instance"
-   echo "                        started by this script"
+   echo -e "                        started by this script\n"
    exit;
 elif [ ! -z $2 ]; then
    echo -e "\nERROR: Too many commands provided. You must provide only one of:"
@@ -148,7 +173,7 @@ elif [ ! -z $2 ]; then
    echo "            web    : launch the DB Console web UI to the first cockroach instance"
    echo "                        started by this script"
    echo "            sql    : launch an interactive SQL shell to the first cockroach instance"
-   echo "                        started by this script"
+   echo -e "                        started by this script\n"
    exit;
 elif [[ "$PARAMETER" =~ ^(start|START|Start)$ ]]; then
    START=1
@@ -176,7 +201,7 @@ else
    echo "            web    : launch the DB Console web UI to the first cockroach instance"
    echo "                        started by this script"
    echo "            sql    : launch an interactive SQL shell to the first cockroach instance"
-   echo "                        started by this script"
+   echo -e "                        started by this script\n"
    exit;
 fi
 
@@ -184,17 +209,16 @@ fi
 IFS="
 "
 
-## Gather runtime environment data:
-CURRENT_RUNNING_COUNT=`ps aux | grep cockroach | grep $STAGING | wc -l`
-FILES_IN_USE=`lsof +D $STAGING | grep -c $STAGING`
-
-## Build local folder structure in $STAGING:
-mkdir -p $STAGING
-mkdir -m 750 -p $STAGING/$ID/data
-mkdir -m 750 -p $STAGING/$ID/log
+## Build local folder structure in $STAGING. Only run if we have been asked
+## to $START:
+if [ $START ]; then
+   mkdir -p $STAGING
+   mkdir -m 750 -p $STAGING/$ID/data
+   mkdir -m 750 -p $STAGING/$ID/log
+fi
 
 ## Function to build an egrep-compatible list of ports we intend to use
-## and then checks to see if they are already in use:
+## and then check to see if they are already in use:
 check_for_conflict()
 {
    CHECK_PORTS=""
@@ -246,7 +270,7 @@ if [[ $START && $NODE_COUNT -eq 1 ]]; then
    echo -e "\n##############################  CLUSTER READY!  ##############################\n"
    echo -e "   Single node cluster is live!\n"
 
-   ps aux | grep $COCKROACH | grep $STAGING | grep $ID | awk '{for (i=1;i<=10;i++){$i=""};print}'
+   ps aux | grep "$COCKROACH start" | grep $STAGING | grep $ID | awk '{for (i=1;i<=10;i++){$i=""};print}'
 
    echo -e "\n   SQL Shell: $COCKROACH sql --insecure --host=$HOST"
    echo "   DB Console: http://$HTTP_HOST"
@@ -292,34 +316,46 @@ elif [ $START ]; then
    echo -e "\n##############################  CLUSTER READY!  ##############################\n"
    echo -e "   $NODE_COUNT node cluster is live!\n"
 
-   ps aux | grep $COCKROACH | grep $STAGING | grep $ID | awk '{for (i=1;i<=10;i++){$i=""};print}'
+   ps aux | grep "$COCKROACH start" | grep $STAGING | grep $ID | awk '{for (i=1;i<=10;i++){$i=""};print}'
 
    echo -e "\n   SQL Shell: $COCKROACH sql --insecure --host=$HOST"
    echo "   DB Console: http://$HTTP_HOST"
    echo -e "\n##############################################################################\n"
 
 elif [ $STOP ]; then
-   if [[ $CURRENT_RUNNING_COUNT -gt 0 ]]; then
-      for PID in `ps aux | grep $COCKROACH | grep $STAGING | awk '{print $2}'`; do
+   if [[ `ps aux | grep "$COCKROACH start" | grep $STAGING | wc -l` -gt 0 ]]; then
+      for PID in `ps aux | grep "$COCKROACH start" | grep $STAGING | awk '{print $2}'`; do
          # This is what roachprod does, soooo ....
          kill -9 $PID
       done
+   elif [[ `ps aux | grep "cockroach start" | grep $STAGING | wc -l` -gt 0 ]]; then
+      echo -e "\nERROR: No $COCKROACH processes are running that were started by this script."
+      echo -e "       But there are other versions of cockroach running on this system presently."
+      echo -e "       Run \`spinup stat\` to see them.\n"
    else
       echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
    fi
 elif [ $STATUS ]; then
-   if [[ $CURRENT_RUNNING_COUNT -gt 0 ]]; then
+   if [ -z $VERSION ]; then
       echo -e "\nThe following $COCKROACH processes are running that were started by this script:\n"
-      ps aux | grep $COCKROACH | grep $STAGING
+      ps aux | grep "cockroach.* start" | grep $STAGING
       echo ""
+   elif [[ `ps aux | grep "$COCKROACH start" | grep $STAGING | wc -l` -gt 0 ]]; then
+      echo -e "\nThe following $COCKROACH processes are running that were started by this script:\n"
+      ps aux | grep "$COCKROACH start" | grep $STAGING
+      echo ""
+   elif [[ `ps aux | grep "cockroach start" | grep $STAGING | wc -l` -gt 0 ]]; then
+      echo -e "\nERROR: No $COCKROACH processes are running that were started by this script."
+      echo -e "       But there are other versions of cockroach running on this system presently."
+      echo -e "       Run \`spinup stat\` to see them.\n"
    else
       echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
    fi
 elif [ $CLEAN ]; then
-   USED_RAW=`du -sk $STAGING/* | cut -f 1 | grep -v ^0$ | paste -sd+ -| bc`
-   if [ $FILES_IN_USE -gt 0 ]; then
-      echo "ERROR: Files in $STAGING are in use! Please run \`spinup stop\` first"
-      echo "       before attempting to clean the staging directory."
+   USED_RAW=`du -sk $STAGING/* 2>/dev/null | cut -f 1 | grep -v ^0$ | paste -sd+ -| bc`
+   if [[ `lsof +D $STAGING | grep -c $STAGING` -gt 0 ]]; then
+      echo -e "\nERROR: Files in $STAGING are in use! Please run \`spinup stop\` first"
+      echo -e "       before attempting to clean the staging directory.\n"
       exit;
    elif [[ ! -z $USED_RAW ]]; then
       USED=`echo "scale=2;$USED_RAW/1024/1024" | bc`
@@ -334,7 +370,7 @@ elif [ $CLEAN ]; then
       done
       echo -e "\nFreed up $USED GB!\n"
    else
-      echo -e "  Nothing to clean up! Staging dir $STAGING uses 0KB\n"
+      echo -e "\nNothing to clean up! Staging dir $STAGING uses 0KB\n"
    fi
 elif [ $OPEN_WEB ]; then
    if [[ $CURRENT_RUNNING_COUNT -gt 0 ]]; then
