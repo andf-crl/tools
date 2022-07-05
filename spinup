@@ -37,8 +37,8 @@
 ##   ~/crl/cockroach-v22.1.2.darwin-10.9-amd64
 ##
 ## With a setup like the above, we can then freely run the following easily:
-##    spinup start           :: starts up with default `cockroach` which is 22.1 here
-##    spinup -v 22.1 start   :: same as above
+##    spinup start           :: starts up with default `cockroach`, 22.1 currently
+##    spinup -v 22.1 start   :: same as above, currently
 ##    spinup -v 21.2 start   :: starts up with `which cockroach-21.2`
 ##
 ## Similarly, we can fine-tune the behavior of the other commands as well:
@@ -75,11 +75,6 @@
 ##    LOG:  >> $STAGING/$ID/log/cockroach_node1.log
 ## If you use a ~ in the path, don't quote the value:
 STAGING=~/staging
-
-## Set the current "Stable" version i.e. the latest version.
-## We use this to understand what your version your
-## `which cockroach` is pointing to.
-CURRENT_STABLE="22.1"
 
 ############################################################
 ## BEGIN SCRIPT ##
@@ -136,12 +131,17 @@ if [[ ! -z $VERSION && `echo $VERSION | egrep -c '^[0-9]{1,2}\.[0-9]$'` -lt 1 ]]
    echo "       It must be something like \`21.2\` or \`21.1\`."
    echo "       Leave off the -v flag to use your environment's /`cockroach/`."
    exit;
-elif [[ ! -z $VERSION && ! `which cockroach-$VERSION` ]]; then
-   echo "ERROR: No matching cockroach binary found in \$PATH for requested version $VERSION"
+elif [[ -z $VERSION && ! `which cockroach` ]]; then
+   echo "ERROR: No matching cockroach binary found in \$PATH."
    echo "       This script expects either \`cockroach\` or \`cockroach-21.2\`"
-   echo "       (or similar other version) to be findable in your $PATH"
+   echo "       (or similar other version) to be findable in your $PATH."
    exit;
-elif [[ ! -z $VERSION && $VERSION != $CURRENT_STABLE ]]; then
+elif [[ ! -z $VERSION && ! `which cockroach-$VERSION` ]]; then
+   echo "ERROR: No matching cockroach binary found in \$PATH for requested version $VERSION."
+   echo "       This script expects either \`cockroach\` or \`cockroach-21.2\`"
+   echo "       (or similar other version) to be findable in your $PATH."
+   exit;
+elif [[ ! -z $VERSION && $VERSION != `cockroach --version | grep 'Build Tag:' | egrep -o '[0-9]{1,2}\.[0-9]'` ]]; then
    COCKROACH="cockroach-$VERSION"
 else
    COCKROACH="cockroach"
@@ -307,7 +307,7 @@ elif [ $START ]; then
 
    sleep 1
 
-   ## if -p was passed, populate the cluster with sample data from movr:
+   ## if the -i flag was passed, import sample data from movr into the cluster:
    if [ $IMPORT_MOVR -eq 1 ]; then
       $COCKROACH workload init movr "postgresql://root@$HOST?sslmode=disable"
    fi
@@ -336,7 +336,7 @@ elif [ $STOP ]; then
       echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
    fi
 elif [ $STATUS ]; then
-   if [ -z $VERSION ]; then
+   if [[ -z $VERSION  && `ps aux | grep "cockroach.* start" | grep $STAGING` ]]; then
       echo -e "\nThe following $COCKROACH processes are running that were started by this script:\n"
       ps aux | grep "cockroach.* start" | grep $STAGING
       echo ""
@@ -373,16 +373,16 @@ elif [ $CLEAN ]; then
       echo -e "\nNothing to clean up! Staging dir $STAGING uses 0KB\n"
    fi
 elif [ $OPEN_WEB ]; then
-   if [[ $CURRENT_RUNNING_COUNT -gt 0 ]]; then
+   if [[ `ps aux | grep "cockroach.* start" | grep $STAGING | wc -l` -gt 0 ]]; then
       HTTP_HOST=`ps aux | grep "$COCKROACH start" | grep $STAGING | sort -k 16 | head -1 | awk '{print $16}' | sed 's%--http-addr=%%g'`
       open http://$HTTP_HOST
    else
       echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
    fi
 elif [ $OPEN_SQL ]; then
-   if [[ $CURRENT_RUNNING_COUNT -gt 0 ]]; then
-      HOST=`ps aux | grep "$COCKROACH start" | grep $STAGING | sort -k 15 | head -1 | awk '{print $15}' | sed 's%--listen-addr=%%g'`
-      $COCKROACH sql --insecure --host=$HOST
+   if [[ `ps aux | grep "cockroach.* start" | grep $STAGING | wc -l` -gt 0 ]]; then
+      SQL_HOST=`ps aux | grep "$COCKROACH start" | grep $STAGING | sort -k 15 | head -1 | awk '{print $15}' | sed 's%--listen-addr=%%g'`
+      $COCKROACH sql --insecure --host=$SQL_HOST
    else
       echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
    fi
