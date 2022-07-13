@@ -13,6 +13,8 @@
 ##              started by this script
 ## - sql:    launch an interactive SQL shell to the first cockroach instance
 ##              started by this script
+## - log:    open the logfile of the first cockroach instance started by this
+##              script
 ##
 ## Supports the following flags:
 ##
@@ -58,13 +60,18 @@
 ##    spinup -v 22.1 sql    :: opens SQL shell to first cockroach 22.1 proc started by us
 ##    spinup -v 21.2 sql    :: opens SQL shell to first cockroach 21.2 proc started by us
 ##
+##    spinup log            :: opens logfile of first cockroach proc started by us
+##    spinup -v 22.1 log    :: opens logfile of first cockroach 22.1 proc started by us
+##    spinup -v 21.2 log    :: opens logfile of first cockroach 21.2 proc started by us
+
 ## TODO: 
 ##   - Add --pid-file support per Raph.
 ##   - Improve resilience working with staging dir, $ID clobbering, etc.
 ##         Likely with --pid-file.
+##   - Improve version handling for WEB, SQL, LOG, where no handling is
+##         present for requesting a version that is not running
 ##   - Add -b break flag to randomly break an active cluster, based on
 ##         firedrills docs
-##   - Add -l log flag to tail logfile per cluster.
 
 ############################################################
 ## YOUR VALUES ##
@@ -134,12 +141,12 @@ if [[ ! -z $VERSION && `echo $VERSION | egrep -c '^[0-9]{1,2}\.[0-9]$'` -lt 1 ]]
 elif [[ -z $VERSION && ! `which cockroach` ]]; then
    echo "ERROR: No matching cockroach binary found in \$PATH."
    echo "       This script expects either \`cockroach\` or \`cockroach-21.2\`"
-   echo "       (or similar other version) to be findable in your $PATH."
+   echo "       (or similar other version) to be findable in your \$PATH."
    exit;
 elif [[ ! -z $VERSION && ! `which cockroach-$VERSION` ]]; then
    echo "ERROR: No matching cockroach binary found in \$PATH for requested version $VERSION."
    echo "       This script expects either \`cockroach\` or \`cockroach-21.2\`"
-   echo "       (or similar other version) to be findable in your $PATH."
+   echo "       (or similar other version) to be findable in your \$PATH."
    exit;
 elif [[ ! -z $VERSION && $VERSION != `cockroach --version | grep 'Build Tag:' | egrep -o '[0-9]{1,2}\.[0-9]'` ]]; then
    COCKROACH="cockroach-$VERSION"
@@ -161,7 +168,9 @@ if [ -z $PARAMETER ]; then
    echo "            web    : launch the DB Console web UI to the first cockroach instance"
    echo "                        started by this script"
    echo "            sql    : launch an interactive SQL shell to the first cockroach instance"
-   echo -e "                        started by this script\n"
+   echo "                        started by this script"
+   echo "            log    : open the logfile of the first cockroach instance started by this"
+   echo -e "                     script\n"
    exit;
 elif [ ! -z $2 ]; then
    echo -e "\nERROR: Too many commands provided. You must provide only one of:"
@@ -173,7 +182,9 @@ elif [ ! -z $2 ]; then
    echo "            web    : launch the DB Console web UI to the first cockroach instance"
    echo "                        started by this script"
    echo "            sql    : launch an interactive SQL shell to the first cockroach instance"
-   echo -e "                        started by this script\n"
+   echo "                        started by this script"
+   echo "            log    : open the logfile of the first cockroach instance started by this"
+   echo -e "                     script\n"
    exit;
 elif [[ "$PARAMETER" =~ ^(start|START|Start)$ ]]; then
    START=1
@@ -191,6 +202,8 @@ elif [[ "$PARAMETER" =~ ^(web|WEB|Web|http|HTTP|Http)$ ]]; then
    OPEN_WEB=1
 elif [[ "$PARAMETER" =~ ^(sql|SQL|Sql)$ ]]; then
    OPEN_SQL=1
+elif [[ "$PARAMETER" =~ ^(log|LOG|Log)$ ]]; then
+   OPEN_LOG=1
 else
    echo -e "\nERROR: You specified an unsupported command. Valid commands are:"
    echo "            start  : start a new cockroach cluster and init"
@@ -201,7 +214,9 @@ else
    echo "            web    : launch the DB Console web UI to the first cockroach instance"
    echo "                        started by this script"
    echo "            sql    : launch an interactive SQL shell to the first cockroach instance"
-   echo -e "                        started by this script\n"
+   echo "                        started by this script"
+   echo "            log    : open the logfile of the first cockroach instance started by this"
+   echo -e "                     script\n"
    exit;
 fi
 
@@ -388,6 +403,26 @@ elif [ $OPEN_SQL ]; then
    if [[ `ps aux | grep "cockroach.* start" | grep $STAGING | wc -l` -gt 0 ]]; then
       SQL_HOST=`ps aux | grep "$COCKROACH start" | grep $STAGING | sort -k 15 | head -1 | awk '{print $15}' | sed 's%--listen-addr=%%g'`
       $COCKROACH sql --insecure --host=$SQL_HOST
+   else
+      echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
+   fi
+elif [ $OPEN_LOG ]; then
+   if [[ `ps aux | grep "cockroach.* start" | grep $STAGING | wc -l` -gt 0 ]]; then
+      ## We still want to sort by a port, to be sure we are finding the first started
+      ## Ports are sorted by first-started, per this script's design, but $IDs
+      ## (i.e. PIDs of _this script_) as reported via column $14 cannot be assumed to
+      ## be in any order. So we sort by $15 but return $14:
+      LOG_HOST_DATA_PATH=`ps aux | grep "$COCKROACH start" | grep $STAGING | sort -k 15 | head -1 | awk '{print $14}' | sed 's%--store=%%g'`
+
+      ## This will always be 1, but eventually this script will support passing the desired node number
+      ## as a param, to select which node's logfile we open. That will require this line here:
+      LOG_HOST_NODE_NUM=`echo $LOG_HOST_DATA_PATH | awk -F '/' '{print $(NF)}' | sed 's%node%%g'`
+      LOG_HOST_ID=`echo $LOG_HOST_DATA_PATH | sed "s%/data/node$LOG_HOST_NODE_NUM%%g" | awk -F '/' '{print $(NF)}'`
+      LOGFILE="$STAGING/$LOG_HOST_ID/log/cockroach_node$LOG_HOST_NODE_NUM.log"
+
+      ## Just a plain cat here, so we can pipe to our preferred text processing commands
+      ## like tail or head. TODO: Support replacing cat with tail so we can tail -f:
+      cat $LOGFILE
    else
       echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
    fi
