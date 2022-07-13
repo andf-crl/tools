@@ -170,7 +170,7 @@ if [ -z $PARAMETER ]; then
    echo "            sql    : launch an interactive SQL shell to the first cockroach instance"
    echo "                        started by this script"
    echo "            log    : open the logfile of the first cockroach instance started by this"
-   echo -e "                     script\n"
+   echo -e "                        script\n"
    exit;
 elif [ ! -z $2 ]; then
    echo -e "\nERROR: Too many commands provided. You must provide only one of:"
@@ -184,7 +184,7 @@ elif [ ! -z $2 ]; then
    echo "            sql    : launch an interactive SQL shell to the first cockroach instance"
    echo "                        started by this script"
    echo "            log    : open the logfile of the first cockroach instance started by this"
-   echo -e "                     script\n"
+   echo -e "                        script\n"
    exit;
 elif [[ "$PARAMETER" =~ ^(start|START|Start)$ ]]; then
    START=1
@@ -216,7 +216,7 @@ else
    echo "            sql    : launch an interactive SQL shell to the first cockroach instance"
    echo "                        started by this script"
    echo "            log    : open the logfile of the first cockroach instance started by this"
-   echo -e "                     script\n"
+   echo -e "                        script\n"
    exit;
 fi
 
