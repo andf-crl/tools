@@ -394,16 +394,32 @@ elif [ $CLEAN ]; then
       echo -e "\nNothing to clean up! Staging dir $STAGING uses 0KB\n"
    fi
 elif [ $OPEN_WEB ]; then
-   if [[ `ps aux | grep "cockroach.* start" | grep $STAGING | wc -l` -gt 0 ]]; then
+   if [[ -z $VERSION  && `ps aux | grep "cockroach.* start" | grep $STAGING | wc -l` -gt 0 ]]; then
+      HTTP_HOST=`ps aux | grep "cockroach.* start" | grep $STAGING | sort -k 16 | head -1 | awk '{print $16}' | sed 's%--http-addr=%%g'`
+      open http://$HTTP_HOST
+   elif [[ `ps aux | grep "$COCKROACH start" | grep $STAGING | wc -l` -gt 0 ]]; then
       HTTP_HOST=`ps aux | grep "$COCKROACH start" | grep $STAGING | sort -k 16 | head -1 | awk '{print $16}' | sed 's%--http-addr=%%g'`
       open http://$HTTP_HOST
+   elif [[ `ps aux | grep "cockroach start" | grep $STAGING | wc -l` -gt 0 ]]; then
+      echo -e "\nERROR: No $COCKROACH processes are running that were started by this script."
+      echo -e "       But there are other versions of cockroach running on this system presently."
+      echo -e "       Run \`spinup stat\` to see them.\n"
    else
       echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
    fi
 elif [ $OPEN_SQL ]; then
-   if [[ `ps aux | grep "cockroach.* start" | grep $STAGING | wc -l` -gt 0 ]]; then
+   if [[ -z $VERSION  && `ps aux | grep "cockroach.* start" | grep $STAGING | wc -l` -gt 0 ]]; then
+      SQL_PROC=`ps aux | grep "cockroach.* start" | grep $STAGING | sort -k 15 | head -1`
+      SQL_VERSION=`echo $SQL_PROC | awk '{print $11}'`
+      SQL_HOST=`echo $SQL_PROC | awk '{print $15}' | sed 's%--listen-addr=%%g'`
+      $SQL_VERSION sql --insecure --host=$SQL_HOST
+   elif [[ `ps aux | grep "$COCKROACH start" | grep $STAGING | wc -l` -gt 0 ]]; then
       SQL_HOST=`ps aux | grep "$COCKROACH start" | grep $STAGING | sort -k 15 | head -1 | awk '{print $15}' | sed 's%--listen-addr=%%g'`
       $COCKROACH sql --insecure --host=$SQL_HOST
+   elif [[ `ps aux | grep "cockroach start" | grep $STAGING | wc -l` -gt 0 ]]; then
+      echo -e "\nERROR: No $COCKROACH processes are running that were started by this script."
+      echo -e "       But there are other versions of cockroach running on this system presently."
+      echo -e "       Run \`spinup stat\` to see them.\n"
    else
       echo -e "\nERROR: No $COCKROACH processes are running that were started by this script.\n"
    fi
