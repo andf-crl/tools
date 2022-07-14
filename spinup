@@ -70,8 +70,9 @@
 ##         Likely with --pid-file.
 ##   - Improve version handling for WEB, SQL, LOG, where no handling is
 ##         present for requesting a version that is not running
+##   - Improve log management using --log or --log-config-file
 ##   - Add -b break flag to randomly break an active cluster, based on
-##         firedrills docs
+##         firedrill docs
 
 ############################################################
 ## YOUR VALUES ##
@@ -373,7 +374,7 @@ elif [ $STATUS ]; then
    fi
 elif [ $CLEAN ]; then
    USED_RAW=`du -sk $STAGING/* 2>/dev/null | cut -f 1 | grep -v ^0$ | paste -sd+ -| bc`
-   if [[ `lsof +D $STAGING | grep -c $STAGING` -gt 0 ]]; then
+   if [[ `lsof +D $STAGING | grep -v ' cwd ' | grep -c $STAGING` -gt 0 ]]; then
       echo -e "\nERROR: Files in $STAGING are in use! Please run \`spinup stop\` first"
       echo -e "       before attempting to clean the staging directory.\n"
       exit;
