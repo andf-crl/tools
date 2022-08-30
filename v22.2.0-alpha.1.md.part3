@@ -1,0 +1,569 @@
+<h3 id="v22-2-0-alpha-1-bug-fixes">Bug fixes</h3>
+
+- Fixed the insight execution priority to display the correct value instead of always being `default`. Changed the column to string to avoid converting it in the UI. [#86901][#86901]
+- Fixed the `has_sequence_privilege()` [built-in function](../{{site.versions["dev"]}}/functions-and-operators.html) checking on the `USAGE` privilege. [#82458][#82458]
+- Fixed a bug where [backups](../{{site.versions["dev"]}}/take-full-and-incremental-backups.html) in the base directory of a Google Storage bucket would not be discovered by [`SHOW BACKUPS`](../{{site.versions["dev"]}}/show-backup.html). These 
+backups will now appear correctly. [#80182][#80182]
+- Fixed an [optimizer](../{{site.versions["dev"]}}/cost-based-optimizer.html) bug that prevented expressions of the form `(NULL::STRING[] <@ ARRAY['x'])` from being folded to `NULL`. [#77995][#77995]
+- Fixed the implementation of the function `substr()` in the vectorized execution engine for UTF-8 encodings. [#77308][#77308]
+- A [lookup join](../{{site.versions["dev"]}}/joins.html) on `pg_type.oid` no longer results in an error. Example: `SELECT pg_type.oid FROM (SELECT null::OID AS b) AS a INNER LOOKUP JOIN pg_type ON pg_type.oid=a.b`. [#78960][#78960]
+- Previously, queries reading from an index or primary key on `FLOAT` or `REAL` columns `DESC` would read `-0` for every `+0` value stored in the index. Fixed this to correctly read `+0` for `+0` and `-0` for `-0`. [#79473][#79473]
+- Previously, queries with many joins and projections of multi-column expressions, e.g., `col1 + col2`, either present in the query or within a virtual column definition, could experience very long optimization times or hangs, where the query is 
+never sent for execution. This has now been fixed. [#80212][#80212]
+- Previously, queries which involve an [`ORDER BY`](../{{site.versions["dev"]}}/order-by.html) clause, a `DISTINCT ON` clause and a `GROUP BY` clause could sometimes error out depending on the columns referenced in those clauses. This is now fixed. 
+[#80447][#80447]
+- Updated the type reported in the wire protocol for `STRING(n)` types to match `VARCHAR(n)`. [#80414][#80414]
+- Previously, creating a table with a locality of [`REGIONAL BY ROW`](../{{site.versions["dev"]}}/multiregion-overview.html#regional-by-row-tables) could intermittently fail with a missing type error. This is now fixed. [#80590][#80590]
+- [`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE`](../{{site.versions["dev"]}}/experimental-features.html#show-table-fingerprints) now works on tables with partial indexes. [#80539][#80539]
+- Fixed a rare race condition that could allow for a transaction to serve a stale read and violate real-time ordering under moderate clock skew. [#80706][#80706]
+- The hex encoding for [`BYTEA`](../{{site.versions["dev"]}}/bytes.html) values now works properly when used in [`COPY FROM ... CSV`](../{{site.versions["dev"]}}/copy-from.html) statements. [#81120][#81120]
+- Constants in SQL query fields are now correctly removed for `VIEWACTIVITYREDACTED` users. [#80707][#80707]
+- Fixed a gap in disk-stall detection. Previously, disk stalls during filesystem metadata operations could go undetected, inducing deadlocks. Now stalls during these types of operations will correctly fail the process. [#81389][#81389]
+- Fixed a bug that caused duplicated schema change job description messages. [#81268][#81268]
+- Fixed false negatives produced by the `JSON` `?` operator when invoked on a `JSON` array with the vectorized engine set explicitly to `off`. [#81648][#81648]
+- Fixed a bug where [sequences](../{{site.versions["dev"]}}/create-sequence.html) could return values that are out-of-bounds in some cases. [#81123][#81123]
+- Fixed the formatting of floats in arrays and tuples sent over the client-server pgwire protocol so that they respect the `extra_float_digits` parameter, and correctly format infinity values. [#82022][#82022]
+- The [`DateStyle`](../{{site.versions["dev"]}}/show-vars.html#supported-variables) session setting is no longer ignored using the CLI when set in the `options` URL parameter. [#82101][#82101]
+- Previously, dropping tables with foreign key dependencies would generate the wrong `pgcode` (`Uncategorized` versus `DependentObjectsStillExist`). This is now fixed. [#80142][#80142]
+- Previously, if a [foreign key](../{{site.versions["dev"]}}/foreign-key.html) was concurrently added while the referenced table was dropped before validation was completed, CockroachDB could potentially hang on the rollback. Now, CockroachDB will 
+generate appropriate errors when the referenced table is dropped and gracefully rollback the change. [#80142][#80142]
+- Views are no longer allowed to reference types that are defined in different databases. Even though this was allowed at view-creation time previously, it would cause errors, since cross-database type references are not supported. [#82763][#82763]
+- [`CREATE TABLE AS`](../{{site.versions["dev"]}}/create-table-as.html) in explicit transactions would fail with an error if the size of the source table exceeded the Raft command size limit. [#82951][#82951]
+- Range lease transfers are no longer permitted to follower replicas that may require a [Raft snapshot](../{{site.versions["dev"]}}/architecture/replication-layer.html#snapshots). This ensures that lease transfers are never delayed behind snapshots, 
+which could previously create range unavailability until the snapshot completed. Lease transfers are now only allowed when the outgoing leaseholder can guarantee that the incoming leaseholder does not need a snapshot. [#82758][#82758]
+- Fixed a bug where creating a unique, expression index on a [`REGIONAL BY TABLE`](../{{site.versions["dev"]}}/multiregion-overview.html) could result in an error. [#83125][#83125]
+- Fixed a bug where in rare cases a stale read could be returned. This is fixed by introducing a new in-memory field to a `LeaseStatus`, which is when it most recently acquired data to a different store. Any uncertain observed timestamps before this 
+time are ignored. [#83345][#83345]
+- Previously, the `querySummary` metadata field in the [`crdb_internal.statement_statistics`](../{{site.versions["dev"]}}/crdb-internal.html) table was inconsistent with the query metadata field for executed prepared statements. These fields are now 
+consistent for prepared statements. [#83673][#83673]
+- Fixed a bug where [`BACKUP`](../{{site.versions["dev"]}}/backup.html) may be missing data when the cluster was configured with very low values for `kv.bulk_sst.max_allowed_overage` and `kv.bulk_sst.target_size` cluster settings. [#83102][#83102]
+- Fixed an issue where some [exports](../{{site.versions["dev"]}}/export.html) would receive `"unexpected closure of consumer"` rather than the actual error the export encountered. [#77938][#77938]
+- Fixed a bug causing a graceful node shutdown to stall forever. [#83824][#83824]
+- The `PASSWORD` option of the [`CREATE`](../{{site.versions["dev"]}}/create-role.html)/[`ALTER ROLE`](../{{site.versions["dev"]}}/alter-role.html) commands now requires the password to be surrounded with single quotes. This fixes confusion that 
+could arise when a mixed-case string is used, since previously that would cause the password to be normalized to lowercase. [#83924][#83924]
+- Fixed a bug causing the `row_to_json` SQL function to error out when used with input having the `VOID` data type. [#83876][#83876]
+- The [Active Transactions page](../{{site.versions["dev"]}}/ui-transactions-page.html) no longer shows transactions from closed sessions. [#83896][#83896]
+- Fixed a bug that could cause an [optimizer](../{{site.versions["dev"]}}/cost-based-optimizer.html) panic in rare cases when a query had a left join in the input of an inner join. [#83875][#83875]
+- `DROP SCHEMA ... CASCADE` in the legacy schema changer now correctly fails when a [backup](../{{site.versions["dev"]}}/backup.html), [restore](../{{site.versions["dev"]}}/restore.html), or an [import](../{{site.versions["dev"]}}/import.html) of an 
+underlying table or type is concurrently underway. [#84189][#84189]
+- `DROP ... CASCADE` of a database or a schema in the [declarative schema changer](../{{site.versions["dev"]}}/online-schema-changes.html#declarative-schema-changer) now correctly fails when a when a 
+[backup](../{{site.versions["dev"]}}/backup.html), [restore](../{{site.versions["dev"]}}/restore.html), or an [import](../{{site.versions["dev"]}}/import.html) of an underlying table or type is concurrently underway. [#84189][#84189]
+- Fixed a bug that caused internal errors in rare cases when performing `DELETE`s on a table that had [foreign key](../{{site.versions["dev"]}}/foreign-key.html) references to it with the `ON DELETE CASCADE` option. For example, imagine tables `a` 
+and `b` already exist, and `b` has a foreign key `ON DELETE CASCADE` column referencing `a`. If table `c` is added with a foreign key `ON DELETE CASCADE` column referencing table `b` and a `DELETE` statement is performed on table `a` in the same 
+transaction, an internal error could occur. This bug has been present since v21.1.0. [#84219][#84219]
+- Fixed a bug that could corrupt [indexes](../{{site.versions["dev"]}}/indexes.html) and cause incorrect query results with `INTERVAL` values greater than about `290` years or less than about `-290` years. [#84045][#84045]
+- Fixed a bug that led to the `querySummary` field in the [`crdb_internal.statements_statistics`](../{{site.versions["dev"]}}/crdb-internal.html) metadata column being empty. [#84170][#84170]
+- Previously, CockroachDB could deadlock when evaluating analytical queries if multiple queries had to spill to disk at the same time. This is now fixed by making some of the queries error out instead. [#84398][#84398]
+- Fixed a bug where an ephemeral I/O error could crash a node. [#84449][#84449]
+- Fixed a bug where, in an [`ALTER PRIMARY KEY`](../{{site.versions["dev"]}}/alter-primary-key.html) statement, if the new primary key columns is a subset of the previous primary key columns, CockroachDB would not rewrite existing secondary indexes, 
+and hence those secondary indexes continue to have some of the previous primary key columns in their `suffixColumns`. But the user might, reasonably think those columns are not used anymore and proceed to drop them. The bug then caused those 
+dependent secondary indexes to be dropped, unexpectedly for the user. [#84303][#84303]
+- Fixed a bug where the [CLI `cockroach` commands](../{{site.versions["dev"]}}/cockroach-commands.html) could produce spurious `"latency jump"` warnings when connecting to a remote server. This bug had been introduced in CockroachDB v21.2. 
+[#84031][#84031]
+- Fixed vectorized evaluation of `COALESCE` when involving expressions of type `VOID`, and enhances type checking of `NULLIF` expressions with `VOID`, so incompatible comparisons can be caught during query compilation instead of during query 
+execution. [#83868][#83868]
+- In the DB Console, changing the time window using arrow buttons and the **Now** button will now properly turn the timeframe into a moving window when `endTime = now`. [#84649][#84649]
+- The `cockroach` process no longer announces that it is shutting down to `stdout` when running with the `--background` flag. [#84532][#84532]
+- The `public` role can no longer be granted default privileges with the `grant` option. This was a bug because the `public` role already cannot have the grant option on regular privileges. [#85027][#85027]
+- Fixed a bug that where CockroachDB could initialize a `schemaChangerState` of `connExecutor` from the corresponding session variable (`use_declarative_schema_changer`), which can cause DDL statements to be executed under the legacy schema changer 
+unknowingly. [#85344][#85344]
+- When a CockroachDB [node is being drained](../{{site.versions["dev"]}}/node-shutdown.html#drain-a-node-manually), all queries that are still running on that node are now forcefully canceled after waiting the `server.shutdown.query_wait` period. 
+[#82752][#82752]
+- The SQL [Unix socket](../{{site.versions["dev"]}}/connection-parameters.html#example-uri-for-a-unix-domain-socket), when requested, now contains a port number compatible with the connection URL when `--listen-addr` is configured to auto-allocate a 
+port number. This bug had existed since CockroachDB v1.0. [#84910][#84910]
+- Previously, if a [Unix socket](../{{site.versions["dev"]}}/connection-parameters.html#example-uri-for-a-unix-domain-socket) was requested but it already existed on disk, CockroachDB would exit with an error even if the original owner process was 
+not running. This limitation would, for example, prevent reuse of a Unix socket after an abnormal shutdown. It had been present since CockroachDB v1.0. This is now fixed. [#84910][#84910]
+- Fixed a panic when loading tenant HTTP endpoints for statement statistics. [#85407][#85407]
+- The `crdb_internal.range_statistics` function now uses a vectorized implementation that allows the lookup of range metadata to occur in parallel. [#85442][#85442]
+- Fixed a bug where `EXECUTE` did not accept placeholder arguments if the type did not exactly match. [#85861][#85861]
+- Fixed a bug where, in a stage of validation operations in the [declarative schema changer](../{{site.versions["dev"]}}/online-schema-changes.html#declarative-schema-changer), only the first validation operation is properly handled and the rest are 
+skipped. [#85781][#85781]
+- Fixed a bug internal to drawing dependency graph of a DDL statement under the [declarative schema changer](../{{site.versions["dev"]}}/online-schema-changes.html#declarative-schema-changer). [#85773][#85773]
+- Fixed a rare bug where errors could occur related to the use of arrays of type [`ENUM`](../{{site.versions["dev"]}}/enum.html). [#85940][#85940]
+- CockroachDB now more precisely respects the `distsql_workmem` setting, which improves the stability of each node and makes out-of-memory issues less likely. [#85440][#85440]
+- Fixed a bug in post deserialization changes where CockroachDB might incorrectly change constraint ID of a constraint that lives in the mutation slice of a table descriptor. [#85778][#85778]
+- Active Execution pages will no longer crash if there are no filters set in local settings. [#86139][#86139]
+- Fixed a bug where an incorrect parameter name for database was used in the SQL API. The correct parameter name `database` is now used. [#86169][#86169]
+- The statements and transaction fingerprint will no longer get stuck on the loading page in the {{ site.data.products.db }} Console after 5 minutes idling on the page. [#85772][#85772]
+- Intersection spatial operations could previously return incorrect results on the ARM processor. This is now resolved. [#86126][#86126]
+- Sequence integer bounds are now consistent with the [cluster setting](../{{site.versions["dev"]}}/cluster-settings.html) `default_int_size`. [#84555][#84555]
+- Users that create an external connection are now granted `ALL` privileges on the object. [#86336][#86336]
+- Fixed a vulnerability in the [optimizer](../{{site.versions["dev"]}}/cost-based-optimizer.html) that could cause a panic in rare cases when planning complex queries with [`ORDER BY`](../{{site.versions["dev"]}}/order-by.html). [#86193][#86193]
+- Fixed a bug in [backup](../{{site.versions["dev"]}}/take-full-and-incremental-backups.html) where spans for views were being backed up. Because ranges are not split at view boundaries, this can cause the backup to send [export 
+requests](../{{site.versions["dev"]}}/backup-architecture.html) to ranges that do not belong to any backup target. [#85158][#85158]
+- Previously, [`SET SESSION AUTHORIZATION DEFAULT`](../{{site.versions["dev"]}}/set-vars.html) would have no effect. Now, it causes the current role to be reset to the original user who logged into the session. [#86485][#86485]
+- Fixed a bug with Search in the Active Execution Overview pages, where providing a search string did not properly filter out statements and transactions that do not contain the search string. [#86764][#86764]
+- Fixed a longstanding bug that could cause the [optimizer](../{{site.versions["dev"]}}/cost-based-optimizer.html) to produce an incorrect plan when aggregate functions `st_makeline` or `st_extent` were called with invalid-type and empty inputs 
+respectively. [#86722][#86722]
+- Fixed a crash that could occur when formatting queries that have placeholder `BitArray` arguments. [#86607][#86607]
+- Fixed a crash/panic that could occur if placeholder arguments were used with the `with_min_timestamp()` or `with_max_staleness()` [functions](../{{site.versions["dev"]}}/functions-and-operators.html). [#86605][#86605]
+- Fixed a bug that caused some special characters to be misread if `COPY ... FROM into a TEXT[]` column was reading them. [#86712][#86712]
+- Previously, CockroachDB would return an internal error when evaluating the `json_build_object()` built-in when an `ENUM` or `VOID` data type was passed as the first argument. This is now fixed. [#86675][#86675]
+- Rollback of [materialized view](../{{site.versions["dev"]}}/views.html#materialized-views) creation left references inside dependent objects. This fix adds clean up to the back/forward references for materialized views. [#82087][#82087]
+- User-defined functions are disallowed in any expressions (column, index, constraint) in tables. [#85718][#85718]
+
+<h3 id="v22-2-0-alpha-1-performance-improvements">Performance improvements</h3>
+
+- Performance of inner, semi, or anti [joins](../{{site.versions["dev"]}}/joins.html) between two tables with `OR`ed equi-join predicates is improved by enabling the [optimizer](../{{site.versions["dev"]}}/cost-based-optimizer.html) to select a join 
+plan in which each equi-join predicate is evaluated by a separate join, with the results of the joins as a union or intersected together. [#74303][#74303]
+- Expressions using the overlaps (`&&`) operator for arrays now support index-acceleration for faster execution in some cases. [#77418][#77418]
+- Improved the ability of the [optimizer](../{{site.versions["dev"]}}/cost-based-optimizer.html) to detect contradictions in filter conditions of the form `x IS NULL` when `x` can never be `NULL`. This enables the optimizer to simplify query plans. 
+[#80211][#80211]
+- Added per-span checkpointing to cases when the [high-water mark](../{{site.versions["dev"]}}/change-data-capture-overview.html#how-does-an-enterprise-changefeed-work) lags excessively behind the leading edge of the frontier in order to avoid 
+re-emitting the majority of spans due to a small minority that is experiencing issues progressing. This helps to enable changefeeds to operate on very large tables when performing large catchup scan. [#77763][#77763]
+- The [optimizer](../{{site.versions["dev"]}}/cost-based-optimizer.html) cost model is now more aware of the cost of executing expensive functions (such as spatial functions) in filter conditions. This may lead to improved query plans. 
+[#81924][#81924]
+- [Changefeed](../{{site.versions["dev"]}}/change-data-capture-overview.html) catchup scans now use time-bound iterators, which improves their performance by avoiding accessing data that is outside the catchup scan time interval. Previously, this 
+was controlled by the `kv.rangefeed.catchup_scan_iterator_optimization.enabled` cluster setting, which defaulted to `off`. This change removes this cluster setting, as its functionality is in effect now always enabled. [#82450][#82450]
+- The [optimizer](../{{site.versions["dev"]}}/cost-based-optimizer.html) now explores more efficient query plans when indexing [computed columns](../{{site.versions["dev"]}}/computed-columns.html) and expressions that have `IS NULL` expressions. 
+[#83619][#83619]
+- The [optimizer](../{{site.versions["dev"]}}/cost-based-optimizer.html) can now return the results of a join in sorted order in more cases. This can allow the optimizer to avoid expensive sorts that need to buffer all input rows. [#84689][#84689]
+- The [optimizer](../{{site.versions["dev"]}}/cost-based-optimizer.html) is now less likely to take an excessive amount of time to plan queries with many joins. [#85100][#85100]
+- The [optimizer](../{{site.versions["dev"]}}/cost-based-optimizer.html) can detect contradictory filters in more cases, leading to more efficient query plans. [#85351][#85351]
+- The row-level TTL job has been modified to distribute work using [DistSQL](../{{site.versions["dev"]}}/architecture/sql-layer.html#distsql). This usually results in the leaseholder nodes managing deletes of the spans they own. [#84728][#84728]
+- The execution engine can now short-circuit execution of [lookup joins](../{{site.versions["dev"]}}/joins.html) in more cases, which can decrease latency for queries with limits. [#85731][#85731]
+- `ILIKE` and `NOT ILIKE` filters can now be evaluated more efficiently in some cases. [#85695][#85695]
+- [MVCC garbage collection](../{{site.versions["dev"]}}/architecture/storage-layer.html#garbage-collection) should now be much less disruptive to foreground traffic than previously. [#83213][#83213]
+- The execution engine can now perform [lookup joins](../{{site.versions["dev"]}}/joins.html) in more cases. This can significantly improve join performance when there is a large table with an index that conforms to the join `ON` conditions, as well 
+as allow joins to halt early in the presence of a limit. [#85597][#85597]
+- Point deletes in SQL are now more efficient during concurrent workloads. [#63416][#63416]
+- Enabled table statistics forecasts, which predict future statistics based on historical collected statistics. Forecasts help the [optimizer](../{{site.versions["dev"]}}/cost-based-optimizer.html) produce better plans for queries that read data 
+modified after the latest statistics collection. CockroachDB only uses the forecasts that fit the historical collected statistics very well, meaning it has high confidence in their accuracy. Forecasts can be viewed using `SHOW STATISTICS FOR TABLE 
+... WITH FORECAST`. [#86078][#86078]
+- Optimized the execution of [`COPY FROM`](../{{site.versions["dev"]}}/copy-from.html). [#83840][#83840]
+- Long-running SQL sessions are now less likely to maintain large allocations for long periods of time, which decreases the risk of OOM and improves memory utilization. [#85949][#85949]
+- [SQL statements](../{{site.versions["dev"]}}/sql-statements.html) that cause events to be logged to `system.eventlog` are now able to complete faster. [#86174][#86174]
+- Planning time has been reduced for queries over tables with a large number of columns and/or indexes. [#86606][#86606]
+- Introduced the `kv.log_range_and_node_events.enabled` cluster setting to disable transactionally logging range events (e.g., merges, splits, and rebalancing) and node join and restart events to system tables, to remove the dependency on such 
+tables and improve performance. [#85593][#85593]
+- The default [L0 sub-level enforcement](../{{site.versions["dev"]}}/architecture/storage-layer.html#lsm-levels) for rebalancing and allocation decisions is now set to `block_rebalance_to`. This has the effect of stopping rebalancing to stores that 
+have high read amplification. [#79794][#79794]
+- Changed the MVCC garbage collection queue to recompute MVCC statistics on a range, if after doing a garbage collection run it still thinks there is garbage in the range. [#83194][#83194]
+
+<h3 id="v22-2-0-alpha-1-build-changes">Build changes</h3>
+
+- Upgraded to Go 1.18.4. [#84590][#84590]
+- Build **experimental** Linux ARM64 binary. [#86043][#86043]
+
+<h3 id="v22-2-0-alpha-1-contributors">Contributors</h3>
+
+This release includes 2637 merged PRs by 141 authors.
+We would like to thank the following contributors from the CockroachDB community:
+
+- Eng Zer Jun (first-time contributor)
+- Farye Nwede (first-time contributor)
+- Frediano Ziglio (first-time contributor)
+- Frédéric BIDON (first-time contributor)
+- Nathan Lowe (first-time contributor)
+- Prashant Khoje (first-time contributor)
+- Rajiv Sharma (first-time contributor)
+- Tim Graham
+- changhan (first-time contributor)
+- dandotimujahid (first-time contributor)
+- likzn (first-time contributor)
+- lyubomirkyuchukov (first-time contributor)
+- mosquito2333
+- nnaka2992 (first-time contributor)
+
+[#60719]: https://github.com/cockroachdb/cockroach/pull/60719
+[#63416]: https://github.com/cockroachdb/cockroach/pull/63416
+[#74303]: https://github.com/cockroachdb/cockroach/pull/74303
+[#74337]: https://github.com/cockroachdb/cockroach/pull/74337
+[#74342]: https://github.com/cockroachdb/cockroach/pull/74342
+[#75581]: https://github.com/cockroachdb/cockroach/pull/75581
+[#76154]: https://github.com/cockroachdb/cockroach/pull/76154
+[#76233]: https://github.com/cockroachdb/cockroach/pull/76233
+[#76609]: https://github.com/cockroachdb/cockroach/pull/76609
+[#76753]: https://github.com/cockroachdb/cockroach/pull/76753
+[#77015]: https://github.com/cockroachdb/cockroach/pull/77015
+[#77070]: https://github.com/cockroachdb/cockroach/pull/77070
+[#77308]: https://github.com/cockroachdb/cockroach/pull/77308
+[#77418]: https://github.com/cockroachdb/cockroach/pull/77418
+[#77506]: https://github.com/cockroachdb/cockroach/pull/77506
+[#77521]: https://github.com/cockroachdb/cockroach/pull/77521
+[#77642]: https://github.com/cockroachdb/cockroach/pull/77642
+[#77763]: https://github.com/cockroachdb/cockroach/pull/77763
+[#77785]: https://github.com/cockroachdb/cockroach/pull/77785
+[#77854]: https://github.com/cockroachdb/cockroach/pull/77854
+[#77857]: https://github.com/cockroachdb/cockroach/pull/77857
+[#77860]: https://github.com/cockroachdb/cockroach/pull/77860
+[#77883]: https://github.com/cockroachdb/cockroach/pull/77883
+[#77938]: https://github.com/cockroachdb/cockroach/pull/77938
+[#77955]: https://github.com/cockroachdb/cockroach/pull/77955
+[#77975]: https://github.com/cockroachdb/cockroach/pull/77975
+[#77995]: https://github.com/cockroachdb/cockroach/pull/77995
+[#78044]: https://github.com/cockroachdb/cockroach/pull/78044
+[#78046]: https://github.com/cockroachdb/cockroach/pull/78046
+[#78102]: https://github.com/cockroachdb/cockroach/pull/78102
+[#78103]: https://github.com/cockroachdb/cockroach/pull/78103
+[#78108]: https://github.com/cockroachdb/cockroach/pull/78108
+[#78218]: https://github.com/cockroachdb/cockroach/pull/78218
+[#78255]: https://github.com/cockroachdb/cockroach/pull/78255
+[#78283]: https://github.com/cockroachdb/cockroach/pull/78283
+[#78297]: https://github.com/cockroachdb/cockroach/pull/78297
+[#78317]: https://github.com/cockroachdb/cockroach/pull/78317
+[#78398]: https://github.com/cockroachdb/cockroach/pull/78398
+[#78418]: https://github.com/cockroachdb/cockroach/pull/78418
+[#78501]: https://github.com/cockroachdb/cockroach/pull/78501
+[#78549]: https://github.com/cockroachdb/cockroach/pull/78549
+[#78584]: https://github.com/cockroachdb/cockroach/pull/78584
+[#78585]: https://github.com/cockroachdb/cockroach/pull/78585
+[#78608]: https://github.com/cockroachdb/cockroach/pull/78608
+[#78650]: https://github.com/cockroachdb/cockroach/pull/78650
+[#78652]: https://github.com/cockroachdb/cockroach/pull/78652
+[#78667]: https://github.com/cockroachdb/cockroach/pull/78667
+[#78960]: https://github.com/cockroachdb/cockroach/pull/78960
+[#78961]: https://github.com/cockroachdb/cockroach/pull/78961
+[#78987]: https://github.com/cockroachdb/cockroach/pull/78987
+[#79055]: https://github.com/cockroachdb/cockroach/pull/79055
+[#79086]: https://github.com/cockroachdb/cockroach/pull/79086
+[#79121]: https://github.com/cockroachdb/cockroach/pull/79121
+[#79134]: https://github.com/cockroachdb/cockroach/pull/79134
+[#79135]: https://github.com/cockroachdb/cockroach/pull/79135
+[#79362]: https://github.com/cockroachdb/cockroach/pull/79362
+[#79365]: https://github.com/cockroachdb/cockroach/pull/79365
+[#79444]: https://github.com/cockroachdb/cockroach/pull/79444
+[#79447]: https://github.com/cockroachdb/cockroach/pull/79447
+[#79465]: https://github.com/cockroachdb/cockroach/pull/79465
+[#79473]: https://github.com/cockroachdb/cockroach/pull/79473
+[#79522]: https://github.com/cockroachdb/cockroach/pull/79522
+[#79537]: https://github.com/cockroachdb/cockroach/pull/79537
+[#79554]: https://github.com/cockroachdb/cockroach/pull/79554
+[#79581]: https://github.com/cockroachdb/cockroach/pull/79581
+[#79677]: https://github.com/cockroachdb/cockroach/pull/79677
+[#79679]: https://github.com/cockroachdb/cockroach/pull/79679
+[#79693]: https://github.com/cockroachdb/cockroach/pull/79693
+[#79705]: https://github.com/cockroachdb/cockroach/pull/79705
+[#79748]: https://github.com/cockroachdb/cockroach/pull/79748
+[#79794]: https://github.com/cockroachdb/cockroach/pull/79794
+[#79862]: https://github.com/cockroachdb/cockroach/pull/79862
+[#79968]: https://github.com/cockroachdb/cockroach/pull/79968
+[#79998]: https://github.com/cockroachdb/cockroach/pull/79998
+[#80007]: https://github.com/cockroachdb/cockroach/pull/80007
+[#80115]: https://github.com/cockroachdb/cockroach/pull/80115
+[#80133]: https://github.com/cockroachdb/cockroach/pull/80133
+[#80142]: https://github.com/cockroachdb/cockroach/pull/80142
+[#80154]: https://github.com/cockroachdb/cockroach/pull/80154
+[#80182]: https://github.com/cockroachdb/cockroach/pull/80182
+[#80185]: https://github.com/cockroachdb/cockroach/pull/80185
+[#80204]: https://github.com/cockroachdb/cockroach/pull/80204
+[#80211]: https://github.com/cockroachdb/cockroach/pull/80211
+[#80212]: https://github.com/cockroachdb/cockroach/pull/80212
+[#80245]: https://github.com/cockroachdb/cockroach/pull/80245
+[#80274]: https://github.com/cockroachdb/cockroach/pull/80274
+[#80318]: https://github.com/cockroachdb/cockroach/pull/80318
+[#80330]: https://github.com/cockroachdb/cockroach/pull/80330
+[#80363]: https://github.com/cockroachdb/cockroach/pull/80363
+[#80408]: https://github.com/cockroachdb/cockroach/pull/80408
+[#80410]: https://github.com/cockroachdb/cockroach/pull/80410
+[#80414]: https://github.com/cockroachdb/cockroach/pull/80414
+[#80417]: https://github.com/cockroachdb/cockroach/pull/80417
+[#80443]: https://github.com/cockroachdb/cockroach/pull/80443
+[#80447]: https://github.com/cockroachdb/cockroach/pull/80447
+[#80481]: https://github.com/cockroachdb/cockroach/pull/80481
+[#80491]: https://github.com/cockroachdb/cockroach/pull/80491
+[#80499]: https://github.com/cockroachdb/cockroach/pull/80499
+[#80511]: https://github.com/cockroachdb/cockroach/pull/80511
+[#80539]: https://github.com/cockroachdb/cockroach/pull/80539
+[#80548]: https://github.com/cockroachdb/cockroach/pull/80548
+[#80590]: https://github.com/cockroachdb/cockroach/pull/80590
+[#80592]: https://github.com/cockroachdb/cockroach/pull/80592
+[#80706]: https://github.com/cockroachdb/cockroach/pull/80706
+[#80707]: https://github.com/cockroachdb/cockroach/pull/80707
+[#80806]: https://github.com/cockroachdb/cockroach/pull/80806
+[#80809]: https://github.com/cockroachdb/cockroach/pull/80809
+[#80861]: https://github.com/cockroachdb/cockroach/pull/80861
+[#80874]: https://github.com/cockroachdb/cockroach/pull/80874
+[#81042]: https://github.com/cockroachdb/cockroach/pull/81042
+[#81071]: https://github.com/cockroachdb/cockroach/pull/81071
+[#81107]: https://github.com/cockroachdb/cockroach/pull/81107
+[#81120]: https://github.com/cockroachdb/cockroach/pull/81120
+[#81123]: https://github.com/cockroachdb/cockroach/pull/81123
+[#81125]: https://github.com/cockroachdb/cockroach/pull/81125
+[#81148]: https://github.com/cockroachdb/cockroach/pull/81148
+[#81253]: https://github.com/cockroachdb/cockroach/pull/81253
+[#81266]: https://github.com/cockroachdb/cockroach/pull/81266
+[#81268]: https://github.com/cockroachdb/cockroach/pull/81268
+[#81298]: https://github.com/cockroachdb/cockroach/pull/81298
+[#81310]: https://github.com/cockroachdb/cockroach/pull/81310
+[#81377]: https://github.com/cockroachdb/cockroach/pull/81377
+[#81389]: https://github.com/cockroachdb/cockroach/pull/81389
+[#81418]: https://github.com/cockroachdb/cockroach/pull/81418
+[#81438]: https://github.com/cockroachdb/cockroach/pull/81438
+[#81530]: https://github.com/cockroachdb/cockroach/pull/81530
+[#81531]: https://github.com/cockroachdb/cockroach/pull/81531
+[#81648]: https://github.com/cockroachdb/cockroach/pull/81648
+[#81734]: https://github.com/cockroachdb/cockroach/pull/81734
+[#81767]: https://github.com/cockroachdb/cockroach/pull/81767
+[#81860]: https://github.com/cockroachdb/cockroach/pull/81860
+[#81879]: https://github.com/cockroachdb/cockroach/pull/81879
+[#81917]: https://github.com/cockroachdb/cockroach/pull/81917
+[#81924]: https://github.com/cockroachdb/cockroach/pull/81924
+[#81933]: https://github.com/cockroachdb/cockroach/pull/81933
+[#81943]: https://github.com/cockroachdb/cockroach/pull/81943
+[#82020]: https://github.com/cockroachdb/cockroach/pull/82020
+[#82022]: https://github.com/cockroachdb/cockroach/pull/82022
+[#82032]: https://github.com/cockroachdb/cockroach/pull/82032
+[#82087]: https://github.com/cockroachdb/cockroach/pull/82087
+[#82101]: https://github.com/cockroachdb/cockroach/pull/82101
+[#82118]: https://github.com/cockroachdb/cockroach/pull/82118
+[#82151]: https://github.com/cockroachdb/cockroach/pull/82151
+[#82166]: https://github.com/cockroachdb/cockroach/pull/82166
+[#82274]: https://github.com/cockroachdb/cockroach/pull/82274
+[#82293]: https://github.com/cockroachdb/cockroach/pull/82293
+[#82304]: https://github.com/cockroachdb/cockroach/pull/82304
+[#82352]: https://github.com/cockroachdb/cockroach/pull/82352
+[#82362]: https://github.com/cockroachdb/cockroach/pull/82362
+[#82389]: https://github.com/cockroachdb/cockroach/pull/82389
+[#82430]: https://github.com/cockroachdb/cockroach/pull/82430
+[#82440]: https://github.com/cockroachdb/cockroach/pull/82440
+[#82450]: https://github.com/cockroachdb/cockroach/pull/82450
+[#82457]: https://github.com/cockroachdb/cockroach/pull/82457
+[#82458]: https://github.com/cockroachdb/cockroach/pull/82458
+[#82463]: https://github.com/cockroachdb/cockroach/pull/82463
+[#82476]: https://github.com/cockroachdb/cockroach/pull/82476
+[#82479]: https://github.com/cockroachdb/cockroach/pull/82479
+[#82523]: https://github.com/cockroachdb/cockroach/pull/82523
+[#82560]: https://github.com/cockroachdb/cockroach/pull/82560
+[#82562]: https://github.com/cockroachdb/cockroach/pull/82562
+[#82633]: https://github.com/cockroachdb/cockroach/pull/82633
+[#82686]: https://github.com/cockroachdb/cockroach/pull/82686
+[#82744]: https://github.com/cockroachdb/cockroach/pull/82744
+[#82752]: https://github.com/cockroachdb/cockroach/pull/82752
+[#82758]: https://github.com/cockroachdb/cockroach/pull/82758
+[#82763]: https://github.com/cockroachdb/cockroach/pull/82763
+[#82797]: https://github.com/cockroachdb/cockroach/pull/82797
+[#82798]: https://github.com/cockroachdb/cockroach/pull/82798
+[#82838]: https://github.com/cockroachdb/cockroach/pull/82838
+[#82877]: https://github.com/cockroachdb/cockroach/pull/82877
+[#82893]: https://github.com/cockroachdb/cockroach/pull/82893
+[#82915]: https://github.com/cockroachdb/cockroach/pull/82915
+[#82936]: https://github.com/cockroachdb/cockroach/pull/82936
+[#82951]: https://github.com/cockroachdb/cockroach/pull/82951
+[#82988]: https://github.com/cockroachdb/cockroach/pull/82988
+[#83014]: https://github.com/cockroachdb/cockroach/pull/83014
+[#83066]: https://github.com/cockroachdb/cockroach/pull/83066
+[#83102]: https://github.com/cockroachdb/cockroach/pull/83102
+[#83118]: https://github.com/cockroachdb/cockroach/pull/83118
+[#83125]: https://github.com/cockroachdb/cockroach/pull/83125
+[#83134]: https://github.com/cockroachdb/cockroach/pull/83134
+[#83143]: https://github.com/cockroachdb/cockroach/pull/83143
+[#83150]: https://github.com/cockroachdb/cockroach/pull/83150
+[#83194]: https://github.com/cockroachdb/cockroach/pull/83194
+[#83213]: https://github.com/cockroachdb/cockroach/pull/83213
+[#83310]: https://github.com/cockroachdb/cockroach/pull/83310
+[#83345]: https://github.com/cockroachdb/cockroach/pull/83345
+[#83347]: https://github.com/cockroachdb/cockroach/pull/83347
+[#83365]: https://github.com/cockroachdb/cockroach/pull/83365
+[#83377]: https://github.com/cockroachdb/cockroach/pull/83377
+[#83417]: https://github.com/cockroachdb/cockroach/pull/83417
+[#83451]: https://github.com/cockroachdb/cockroach/pull/83451
+[#83510]: https://github.com/cockroachdb/cockroach/pull/83510
+[#83520]: https://github.com/cockroachdb/cockroach/pull/83520
+[#83604]: https://github.com/cockroachdb/cockroach/pull/83604
+[#83605]: https://github.com/cockroachdb/cockroach/pull/83605
+[#83614]: https://github.com/cockroachdb/cockroach/pull/83614
+[#83619]: https://github.com/cockroachdb/cockroach/pull/83619
+[#83668]: https://github.com/cockroachdb/cockroach/pull/83668
+[#83673]: https://github.com/cockroachdb/cockroach/pull/83673
+[#83677]: https://github.com/cockroachdb/cockroach/pull/83677
+[#83712]: https://github.com/cockroachdb/cockroach/pull/83712
+[#83717]: https://github.com/cockroachdb/cockroach/pull/83717
+[#83824]: https://github.com/cockroachdb/cockroach/pull/83824
+[#83840]: https://github.com/cockroachdb/cockroach/pull/83840
+[#83851]: https://github.com/cockroachdb/cockroach/pull/83851
+[#83868]: https://github.com/cockroachdb/cockroach/pull/83868
+[#83875]: https://github.com/cockroachdb/cockroach/pull/83875
+[#83876]: https://github.com/cockroachdb/cockroach/pull/83876
+[#83891]: https://github.com/cockroachdb/cockroach/pull/83891
+[#83896]: https://github.com/cockroachdb/cockroach/pull/83896
+[#83903]: https://github.com/cockroachdb/cockroach/pull/83903
+[#83915]: https://github.com/cockroachdb/cockroach/pull/83915
+[#83924]: https://github.com/cockroachdb/cockroach/pull/83924
+[#84031]: https://github.com/cockroachdb/cockroach/pull/84031
+[#84034]: https://github.com/cockroachdb/cockroach/pull/84034
+[#84037]: https://github.com/cockroachdb/cockroach/pull/84037
+[#84045]: https://github.com/cockroachdb/cockroach/pull/84045
+[#84106]: https://github.com/cockroachdb/cockroach/pull/84106
+[#84107]: https://github.com/cockroachdb/cockroach/pull/84107
+[#84108]: https://github.com/cockroachdb/cockroach/pull/84108
+[#84110]: https://github.com/cockroachdb/cockroach/pull/84110
+[#84170]: https://github.com/cockroachdb/cockroach/pull/84170
+[#84189]: https://github.com/cockroachdb/cockroach/pull/84189
+[#84198]: https://github.com/cockroachdb/cockroach/pull/84198
+[#84208]: https://github.com/cockroachdb/cockroach/pull/84208
+[#84219]: https://github.com/cockroachdb/cockroach/pull/84219
+[#84230]: https://github.com/cockroachdb/cockroach/pull/84230
+[#84282]: https://github.com/cockroachdb/cockroach/pull/84282
+[#84283]: https://github.com/cockroachdb/cockroach/pull/84283
+[#84303]: https://github.com/cockroachdb/cockroach/pull/84303
+[#84310]: https://github.com/cockroachdb/cockroach/pull/84310
+[#84398]: https://github.com/cockroachdb/cockroach/pull/84398
+[#84449]: https://github.com/cockroachdb/cockroach/pull/84449
+[#84450]: https://github.com/cockroachdb/cockroach/pull/84450
+[#84471]: https://github.com/cockroachdb/cockroach/pull/84471
+[#84487]: https://github.com/cockroachdb/cockroach/pull/84487
+[#84498]: https://github.com/cockroachdb/cockroach/pull/84498
+[#84500]: https://github.com/cockroachdb/cockroach/pull/84500
+[#84501]: https://github.com/cockroachdb/cockroach/pull/84501
+[#84510]: https://github.com/cockroachdb/cockroach/pull/84510
+[#84516]: https://github.com/cockroachdb/cockroach/pull/84516
+[#84532]: https://github.com/cockroachdb/cockroach/pull/84532
+[#84555]: https://github.com/cockroachdb/cockroach/pull/84555
+[#84590]: https://github.com/cockroachdb/cockroach/pull/84590
+[#84612]: https://github.com/cockroachdb/cockroach/pull/84612
+[#84618]: https://github.com/cockroachdb/cockroach/pull/84618
+[#84619]: https://github.com/cockroachdb/cockroach/pull/84619
+[#84649]: https://github.com/cockroachdb/cockroach/pull/84649
+[#84670]: https://github.com/cockroachdb/cockroach/pull/84670
+[#84674]: https://github.com/cockroachdb/cockroach/pull/84674
+[#84686]: https://github.com/cockroachdb/cockroach/pull/84686
+[#84689]: https://github.com/cockroachdb/cockroach/pull/84689
+[#84728]: https://github.com/cockroachdb/cockroach/pull/84728
+[#84744]: https://github.com/cockroachdb/cockroach/pull/84744
+[#84751]: https://github.com/cockroachdb/cockroach/pull/84751
+[#84761]: https://github.com/cockroachdb/cockroach/pull/84761
+[#84764]: https://github.com/cockroachdb/cockroach/pull/84764
+[#84776]: https://github.com/cockroachdb/cockroach/pull/84776
+[#84783]: https://github.com/cockroachdb/cockroach/pull/84783
+[#84886]: https://github.com/cockroachdb/cockroach/pull/84886
+[#84887]: https://github.com/cockroachdb/cockroach/pull/84887
+[#84910]: https://github.com/cockroachdb/cockroach/pull/84910
+[#84931]: https://github.com/cockroachdb/cockroach/pull/84931
+[#84947]: https://github.com/cockroachdb/cockroach/pull/84947
+[#84999]: https://github.com/cockroachdb/cockroach/pull/84999
+[#85007]: https://github.com/cockroachdb/cockroach/pull/85007
+[#85017]: https://github.com/cockroachdb/cockroach/pull/85017
+[#85027]: https://github.com/cockroachdb/cockroach/pull/85027
+[#85072]: https://github.com/cockroachdb/cockroach/pull/85072
+[#85075]: https://github.com/cockroachdb/cockroach/pull/85075
+[#85081]: https://github.com/cockroachdb/cockroach/pull/85081
+[#85100]: https://github.com/cockroachdb/cockroach/pull/85100
+[#85131]: https://github.com/cockroachdb/cockroach/pull/85131
+[#85134]: https://github.com/cockroachdb/cockroach/pull/85134
+[#85146]: https://github.com/cockroachdb/cockroach/pull/85146
+[#85158]: https://github.com/cockroachdb/cockroach/pull/85158
+[#85159]: https://github.com/cockroachdb/cockroach/pull/85159
+[#85231]: https://github.com/cockroachdb/cockroach/pull/85231
+[#85244]: https://github.com/cockroachdb/cockroach/pull/85244
+[#85280]: https://github.com/cockroachdb/cockroach/pull/85280
+[#85326]: https://github.com/cockroachdb/cockroach/pull/85326
+[#85339]: https://github.com/cockroachdb/cockroach/pull/85339
+[#85343]: https://github.com/cockroachdb/cockroach/pull/85343
+[#85344]: https://github.com/cockroachdb/cockroach/pull/85344
+[#85351]: https://github.com/cockroachdb/cockroach/pull/85351
+[#85392]: https://github.com/cockroachdb/cockroach/pull/85392
+[#85407]: https://github.com/cockroachdb/cockroach/pull/85407
+[#85410]: https://github.com/cockroachdb/cockroach/pull/85410
+[#85421]: https://github.com/cockroachdb/cockroach/pull/85421
+[#85440]: https://github.com/cockroachdb/cockroach/pull/85440
+[#85442]: https://github.com/cockroachdb/cockroach/pull/85442
+[#85453]: https://github.com/cockroachdb/cockroach/pull/85453
+[#85458]: https://github.com/cockroachdb/cockroach/pull/85458
+[#85473]: https://github.com/cockroachdb/cockroach/pull/85473
+[#85489]: https://github.com/cockroachdb/cockroach/pull/85489
+[#85556]: https://github.com/cockroachdb/cockroach/pull/85556
+[#85586]: https://github.com/cockroachdb/cockroach/pull/85586
+[#85593]: https://github.com/cockroachdb/cockroach/pull/85593
+[#85597]: https://github.com/cockroachdb/cockroach/pull/85597
+[#85599]: https://github.com/cockroachdb/cockroach/pull/85599
+[#85634]: https://github.com/cockroachdb/cockroach/pull/85634
+[#85649]: https://github.com/cockroachdb/cockroach/pull/85649
+[#85656]: https://github.com/cockroachdb/cockroach/pull/85656
+[#85671]: https://github.com/cockroachdb/cockroach/pull/85671
+[#85676]: https://github.com/cockroachdb/cockroach/pull/85676
+[#85680]: https://github.com/cockroachdb/cockroach/pull/85680
+[#85695]: https://github.com/cockroachdb/cockroach/pull/85695
+[#85718]: https://github.com/cockroachdb/cockroach/pull/85718
+[#85720]: https://github.com/cockroachdb/cockroach/pull/85720
+[#85731]: https://github.com/cockroachdb/cockroach/pull/85731
+[#85756]: https://github.com/cockroachdb/cockroach/pull/85756
+[#85757]: https://github.com/cockroachdb/cockroach/pull/85757
+[#85764]: https://github.com/cockroachdb/cockroach/pull/85764
+[#85769]: https://github.com/cockroachdb/cockroach/pull/85769
+[#85770]: https://github.com/cockroachdb/cockroach/pull/85770
+[#85772]: https://github.com/cockroachdb/cockroach/pull/85772
+[#85773]: https://github.com/cockroachdb/cockroach/pull/85773
+[#85778]: https://github.com/cockroachdb/cockroach/pull/85778
+[#85781]: https://github.com/cockroachdb/cockroach/pull/85781
+[#85794]: https://github.com/cockroachdb/cockroach/pull/85794
+[#85819]: https://github.com/cockroachdb/cockroach/pull/85819
+[#85844]: https://github.com/cockroachdb/cockroach/pull/85844
+[#85850]: https://github.com/cockroachdb/cockroach/pull/85850
+[#85861]: https://github.com/cockroachdb/cockroach/pull/85861
+[#85863]: https://github.com/cockroachdb/cockroach/pull/85863
+[#85878]: https://github.com/cockroachdb/cockroach/pull/85878
+[#85890]: https://github.com/cockroachdb/cockroach/pull/85890
+[#85896]: https://github.com/cockroachdb/cockroach/pull/85896
+[#85940]: https://github.com/cockroachdb/cockroach/pull/85940
+[#85949]: https://github.com/cockroachdb/cockroach/pull/85949
+[#85957]: https://github.com/cockroachdb/cockroach/pull/85957
+[#85959]: https://github.com/cockroachdb/cockroach/pull/85959
+[#85964]: https://github.com/cockroachdb/cockroach/pull/85964
+[#85974]: https://github.com/cockroachdb/cockroach/pull/85974
+[#85981]: https://github.com/cockroachdb/cockroach/pull/85981
+[#85983]: https://github.com/cockroachdb/cockroach/pull/85983
+[#85986]: https://github.com/cockroachdb/cockroach/pull/85986
+[#86006]: https://github.com/cockroachdb/cockroach/pull/86006
+[#86032]: https://github.com/cockroachdb/cockroach/pull/86032
+[#86033]: https://github.com/cockroachdb/cockroach/pull/86033
+[#86043]: https://github.com/cockroachdb/cockroach/pull/86043
+[#86050]: https://github.com/cockroachdb/cockroach/pull/86050
+[#86055]: https://github.com/cockroachdb/cockroach/pull/86055
+[#86063]: https://github.com/cockroachdb/cockroach/pull/86063
+[#86071]: https://github.com/cockroachdb/cockroach/pull/86071
+[#86078]: https://github.com/cockroachdb/cockroach/pull/86078
+[#86126]: https://github.com/cockroachdb/cockroach/pull/86126
+[#86136]: https://github.com/cockroachdb/cockroach/pull/86136
+[#86139]: https://github.com/cockroachdb/cockroach/pull/86139
+[#86147]: https://github.com/cockroachdb/cockroach/pull/86147
+[#86152]: https://github.com/cockroachdb/cockroach/pull/86152
+[#86161]: https://github.com/cockroachdb/cockroach/pull/86161
+[#86169]: https://github.com/cockroachdb/cockroach/pull/86169
+[#86174]: https://github.com/cockroachdb/cockroach/pull/86174
+[#86190]: https://github.com/cockroachdb/cockroach/pull/86190
+[#86193]: https://github.com/cockroachdb/cockroach/pull/86193
+[#86195]: https://github.com/cockroachdb/cockroach/pull/86195
+[#86216]: https://github.com/cockroachdb/cockroach/pull/86216
+[#86230]: https://github.com/cockroachdb/cockroach/pull/86230
+[#86236]: https://github.com/cockroachdb/cockroach/pull/86236
+[#86252]: https://github.com/cockroachdb/cockroach/pull/86252
+[#86253]: https://github.com/cockroachdb/cockroach/pull/86253
+[#86257]: https://github.com/cockroachdb/cockroach/pull/86257
+[#86264]: https://github.com/cockroachdb/cockroach/pull/86264
+[#86272]: https://github.com/cockroachdb/cockroach/pull/86272
+[#86317]: https://github.com/cockroachdb/cockroach/pull/86317
+[#86319]: https://github.com/cockroachdb/cockroach/pull/86319
+[#86325]: https://github.com/cockroachdb/cockroach/pull/86325
+[#86329]: https://github.com/cockroachdb/cockroach/pull/86329
+[#86336]: https://github.com/cockroachdb/cockroach/pull/86336
+[#86345]: https://github.com/cockroachdb/cockroach/pull/86345
+[#86382]: https://github.com/cockroachdb/cockroach/pull/86382
+[#86402]: https://github.com/cockroachdb/cockroach/pull/86402
+[#86407]: https://github.com/cockroachdb/cockroach/pull/86407
+[#86415]: https://github.com/cockroachdb/cockroach/pull/86415
+[#86417]: https://github.com/cockroachdb/cockroach/pull/86417
+[#86448]: https://github.com/cockroachdb/cockroach/pull/86448
+[#86485]: https://github.com/cockroachdb/cockroach/pull/86485
+[#86486]: https://github.com/cockroachdb/cockroach/pull/86486
+[#86566]: https://github.com/cockroachdb/cockroach/pull/86566
+[#86570]: https://github.com/cockroachdb/cockroach/pull/86570
+[#86572]: https://github.com/cockroachdb/cockroach/pull/86572
+[#86581]: https://github.com/cockroachdb/cockroach/pull/86581
+[#86605]: https://github.com/cockroachdb/cockroach/pull/86605
+[#86606]: https://github.com/cockroachdb/cockroach/pull/86606
+[#86607]: https://github.com/cockroachdb/cockroach/pull/86607
+[#86619]: https://github.com/cockroachdb/cockroach/pull/86619
+[#86653]: https://github.com/cockroachdb/cockroach/pull/86653
+[#86673]: https://github.com/cockroachdb/cockroach/pull/86673
+[#86675]: https://github.com/cockroachdb/cockroach/pull/86675
+[#86677]: https://github.com/cockroachdb/cockroach/pull/86677
+[#86679]: https://github.com/cockroachdb/cockroach/pull/86679
+[#86712]: https://github.com/cockroachdb/cockroach/pull/86712
+[#86722]: https://github.com/cockroachdb/cockroach/pull/86722
+[#86764]: https://github.com/cockroachdb/cockroach/pull/86764
+[#86776]: https://github.com/cockroachdb/cockroach/pull/86776
+[#86812]: https://github.com/cockroachdb/cockroach/pull/86812
+[#86821]: https://github.com/cockroachdb/cockroach/pull/86821
+[#86901]: https://github.com/cockroachdb/cockroach/pull/86901
+
