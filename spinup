@@ -198,7 +198,7 @@ elif [[ "$PARAMETER" =~ ^(start|START|Start)$ ]]; then
 elif [[ "$PARAMETER" =~ ^(stop|STOP|Stop)$ ]]; then
    STOP=1
    echo "Stopping all $COCKROACH processes started earlier by this script ..."
-elif [[ "$PARAMETER" =~ ^(status|STATUS|Status|stat|STAT|Stat)$ ]]; then
+elif [[ "$PARAMETER" =~ ^(status|STATUS|Status|stat|STAT|Stat|show|SHOW|Show)$ ]]; then
    STATUS=1
    echo "Getting status ..."
 elif [[ "$PARAMETER" =~ ^(clean|CLEAN|Clean)$ ]]; then
@@ -270,6 +270,14 @@ if [ $START ]; then
    done
 fi
 
+## Notify user if $STAGING is over 50GB, recommending a spinup clean at some point:
+USED_RAW=`du -sk $STAGING/* 2>/dev/null | cut -f 1 | grep -v ^0$ | paste -sd+ -| bc`
+if [[ $CLEAN -ne 1 && $USED_RAW -gt 52428800 ]]; then
+   USED=`echo "scale=2;$USED_RAW/1024/1024" | bc`
+   echo -e "\nWARNING: Staging dir ($STAGING) is over 50 GB (currently: $USED GB)!"
+   echo -e "         Run \`spinup clean\` at some point to clear it out!\n"
+fi
+
 ## Spinup a cluster, if -n 1 was passed (using start-single-node);
 ## note that start-single-node does not require --join or running init:
 if [[ $START && $NODE_COUNT -eq 1 ]]; then
@@ -282,7 +290,7 @@ if [[ $START && $NODE_COUNT -eq 1 ]]; then
    HTTP_HOST=localhost:$((8080+PORT_OFFSET))
    HOST=localhost:$((26257+PORT_OFFSET))
 
-   ## if -p was passed, populate the cluster with sample data from movr:
+   ## If -p was passed, populate the cluster with sample data from movr:
    if [ $IMPORT_MOVR -eq 1 ]; then
       $COCKROACH workload init movr "postgresql://root@$HOST?sslmode=disable"
    fi
