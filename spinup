@@ -73,6 +73,11 @@
 ##   - Improve log management using --log or --log-config-file
 ##   - Add -b break flag to randomly break an active cluster, based on
 ##         firedrill docs
+##   - Add cert support, built around the following:
+##     mkdir -p /Users/andf/certs
+##     cockroach-22.2 cert create-ca --certs-dir /Users/andf/certs/ --ca-key="/Users/andf/certs/crl-ca-key"
+##     cockroach-22.2 cert create-node localhost --certs-dir /Users/andf/certs/ --ca-key="/Users/andf/certs/crl-ca-key"
+##     cockroach-22.2 cert create-client andf --certs-dir /Users/andf/certs/ --ca-key="/Users/andf/certs/crl-ca-key"
 
 ############################################################
 ## YOUR VALUES ##
@@ -248,7 +253,7 @@ check_for_conflict()
       fi
    done
 
-   PORT_CONFLICT=`netstat -an | egrep -c "($CHECK_PORTS)"`
+   PORT_CONFLICT=`netstat -an | egrep '(ESTABlISHED|LISTEN)' | egrep -c "($CHECK_PORTS)"`
    if [[ $PORT_CONFLICT -gt 0 ]]; then
       return 0
    else
