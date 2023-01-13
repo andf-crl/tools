@@ -253,7 +253,7 @@ check_for_conflict()
       fi
    done
 
-   PORT_CONFLICT=`netstat -an | egrep '(ESTABlISHED|LISTEN)' | egrep -c "($CHECK_PORTS)"`
+   PORT_CONFLICT=`netstat -an | egrep '(ESTABLISHED|LISTEN)' | egrep -c "($CHECK_PORTS)"`
    if [[ $PORT_CONFLICT -gt 0 ]]; then
       return 0
    else
